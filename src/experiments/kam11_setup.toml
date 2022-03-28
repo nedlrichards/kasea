@@ -1,0 +1,18 @@
+[t_f]
+pulse = "KAM11"
+c = "1500."
+fc = "2.5e3"
+fs = "10e3"
+max_dur = "20e-3"
+
+[geometry]
+xrcr = "460."
+zrcr = "-15."
+zsrc = "-105."
+
+[surface]
+type = "CosPR"
+H = "2."
+L = "40."
+phase = "0."
+decimation = "10"

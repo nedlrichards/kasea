@@ -1,0 +1,16 @@
+[t_f]
+c = "1500."
+fc = "2500."
+fs = "4625. * 2"
+max_dur = "0.01"
+
+[geometry]
+xrcr = "200."
+zrcr = "-10."
+zsrc = "-20."
+
+[surface]
+type = "CosPR"
+H = "2."
+L = "40."
+decimation = "10"

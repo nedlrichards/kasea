@@ -1,0 +1,17 @@
+[t_f]
+pulse = "CANOPE"
+c = "1500."
+fc = "4e3"
+fs = "10e3"
+max_dur = "20e-3"
+
+[geometry]
+num_dim = "2"
+xrcr = "3800."
+zrcr = "-200."
+zsrc = "-3800."
+
+[surface]
+type = "PM"
+U20 = "5."
+decimation = "10"
