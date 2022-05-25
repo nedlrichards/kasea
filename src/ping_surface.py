@@ -4,10 +4,8 @@ from math import pi
 from os.path import join
 import copy
 
-from src.specification import Broadcast
-from src.helpers import bound_tau_ras
+from src import Broadcast, bound_tau_ras, Config
 
-save_dir = 'data/canope'
 
 class XMitt:
     """Run common setup and compute scatter time-series"""
@@ -15,6 +13,7 @@ class XMitt:
 
     def __init__(self, toml_file, num_sample_chunk=1e8):
         """Load xmission parameters and run basic setup"""
+        self.cf = Config()
         experiment = Broadcast(toml_file)
         self.num_sample_chunk = num_sample_chunk
 
@@ -37,13 +36,12 @@ class XMitt:
         self.realization = self.experiment.surface.realization()
 
 
-    def save(self, p_sca, time=None):
+    def save(self, file_name, p_sca, time=None):
         """Save scattered pressure allong with toml meta data"""
         save_dict = copy.deepcopy(self.experiment.toml_dict)
         save_dict['p_sca'] = p_sca
         save_dict['time'] = time
-        save_file = f"u20_{save_dict['U20']:.1f}.npz"
-        np.savez(join(save_dir, save_file))
+        np.savez(join(self.cf.save_dir, file_name))
 
 
     def ping_surface(self, time=0.):
@@ -104,14 +102,3 @@ class XMitt:
         return np.fft.irfft(ka)
 
 
-    def surface_realization(self, time=0.):
-        """Compute surface height and derivatives"""
-        surf = self.experiment.surface
-        rlz = self.realization
-        out_size = (3, surf.x_a.size, surf.y_a.size)
-        # make sure data is aligned in memory
-        n_vec = np.empty(out_size)
-        n_vec[0] = -surf.surface_synthesis(rlz, time=time, derivative='x')
-        n_vec[1] = -surf.surface_synthesis(rlz, time=time, derivative='y')
-        n_vec[2] = surf.surface_synthesis(rlz, time=time)
-        return n_vec
