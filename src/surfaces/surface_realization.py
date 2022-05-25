@@ -18,28 +18,31 @@ class Surface:
         """
         self.kmax = kmax
         self.dx = 2 * pi / kmax
+
+        # setup x and y axes
         self.xbounds = xbounds
         Nx = int((xbounds[1] - xbounds[0]) / self.dx + 2)
+
         if Nx % 2: Nx += 1
         x_i = np.arange(Nx)
         self.x_a = x_i * self.dx + xbounds[0] - self.dx
-        # kx is the real fft axis
-        self.Nx = Nx // 2 + 1
 
         self.ybounds = ybounds
         if ybounds is not None:
-            self.Ny = int((ybounds[1] - ybounds[0]) / self.dx + 2)
-            if self.Ny % 2: self.Ny += 1
-            y_i = np.arange(self.Ny)
+            Ny = int((ybounds[1] - ybounds[0]) / self.dx + 2)
+            if Ny % 2: Ny += 1
+            y_i = np.arange(Ny)
             self.y_a = y_i * self.dx + ybounds[0] - self.dx
-            # kx is a complex fft axis
-            self.ky = (np.arange(self.Ny) - self.Ny // 2) * kmax / self.Ny
-            self.N = self.Nx * self.Ny
         else:
-            self.N = self.Nx
             self.y_a = None
-            self.ky = None
-            self.Ny = None
+
+        # wavenumber and spectrum variables set according to surface type
+        self.kx = None
+        self.ky = None
+        self.spec_1D = None
+        self.spec_2D = None
+        self.surface_type = None
+        self._surface_from_dict(surface_dict)
 
         # setup rng
         #self.rng = MultithreadedRNG(2 * self.N, seed=seed)
@@ -48,6 +51,7 @@ class Surface:
     def _surface_from_dict(self, surface_dict):
         """deal with flat and sine special cases or generate a spectrum"""
         s_t = surface_dict['type']
+        self.surface_type = s_t
 
         if s_t = 'sine':
             self.kx = 2 * pi * np.cos(surface_dict['theta']) \
@@ -59,13 +63,9 @@ class Surface:
             self.kx = 0.
             self.spec_1D = 0.
             self.spec_2D = None
-        else:
-            self.kx = np.arange(self.Nx) * kmax / Nx
 
         if self.Ny is not None:
-            kx = self.kx[:, None]
-            ky = self.ky[None, :]
-            k = ne.evaluate("sqrt(kx ** 2 + ky ** 2)")
+
         else:
             k = self.kx
             self.ky = None
@@ -76,15 +76,26 @@ class Surface:
             return
 
         # spectrum specifications
-        if self.Ny is not None:
+        Nx = self.x_a.size
+        self.kx = np.arange(Nx / 2) * self.kmax / Nx
+
+        if self.y_a is not None:
+            Ny = self.y_a.size
+            self.ky = (np.arange(Ny) - Ny // 2) * self.kmax / Ny
+
+            kx = self.kx[:, None]
+            ky = self.ky[None, :]
+            k = ne.evaluate("sqrt(kx ** 2 + ky ** 2)")
+            k_bearing = ne.evaluate("arctan2(ky, kx)")
+        else:
+            k = self.kx
 
         if s_t == 'PM':
             self.spec_1D = PM(k, surface_dict['U20'])
         else:
             raise(ValueError("spectrum is not implimented")
 
-        if self.Ny is not None:
-            k_bearing = ne.evaluate("arctan2(ky, kx)")
+        if self.y_a is not None:
             delta = e_delta(k, surface_dict["U20"])
             self.spec_2D = directional_spectrum(delta,
                                                 k,
