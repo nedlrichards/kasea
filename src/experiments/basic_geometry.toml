@@ -10,7 +10,8 @@ zrcr = "-10."
 zsrc = "-20."
 
 [surface]
-type = "CosPR"
+type = "sine"
 H = "2."
 L = "40."
 decimation = "10"
+z_max = "1."

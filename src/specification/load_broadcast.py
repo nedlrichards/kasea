@@ -10,23 +10,31 @@ from src.helpers import td_geometry, bound_axes
 
 class Broadcast:
     """Load up a test scenario"""
-    def __init__(self, toml_file, est_z_max):
+    def __init__(self, toml_file):
         """scatter calculation specification load and basic setup"""
         toml_dict = load_broadcast(toml_file)
-        self.est_z_max = est_z_max
+        self.est_z_max = toml_dict['surface']['z_max']
+
         self.src, self.rcr = self._positions(toml_dict)
         tf = self._tf_specification(toml_dict)
         self.c, self.fc, self.fs, self.max_dur, self.t_a_pulse, self.pulse = tf
+
         self.t_a, self.f_a = self._tf_axes(toml_dict)
         self.pulse_FT = np.fft.rfft(self.pulse, self.t_a.size)
+
         # use image arrival to determine end of time axis
-        self.tau_img = np.sqrt((self.src[0] - self.rcr[0]) ** 2
-                             + (self.src[1] - self.rcr[1]) ** 2
-                             + (self.src[2] + self.rcr[2]) ** 2)
-        self.tau_img /= self.c
+        r_img_2 = np.sum((self.src[:-1] - self.rcr[:-1]) ** 2) \
+                  + (self.src[-1] + self.rcr[-1]) ** 2
+        self.tau_img = np.sqrt(r_img_2) / self.c
         self.t_max = self.tau_img + self.max_dur
 
-        self.surface, self.seed = self._setup_surface(toml_dict)
+        # axes and surface specification
+        dx = self.c / (self.fs * toml_dict['surface']['decimation'])
+        kmax = 2 * pi / dx
+
+        xbounds, ybounds = bound_axes(self.src, self.rcr, dx, self.est_z_max,
+                                      self.max_dur, c=self.c)
+        self.surface = Surface(xbounds, ybounds, kmax, toml_dict['surface'])
         self.toml_dict = toml_dict
 
 
@@ -56,6 +64,7 @@ class Broadcast:
         max_dur = toml_dict['t_f']['max_dur']
 
         xmitt = toml_dict['t_f']['pulse']
+        xmitt += '_pulse'
 
         spec = importlib.util.spec_from_file_location("pulse",
                                              "src/experiments/" + xmitt + ".py")
@@ -90,18 +99,7 @@ class Broadcast:
 
     def _setup_surface(self, toml_dict):
         """Use scatter duration to bound surface integration"""
-        dx = self.c / (self.fs * toml_dict['surface']['decimation'])
-        U20 = toml_dict['surface']['U20']
-        kmax = 2 * pi / dx
 
-        if 'seed' in toml_dict['surface']:
-            seed = toml_dict['surface']
-        else:
-            seed = 0
-
-        xbounds, ybounds = bound_axes(self.src, self.rcr, dx, self.est_z_max,
-                                      self.max_dur, c=self.c)
-        surf = Surface(xbounds, ybounds, kmax, U20, seed=seed)
         return surf, seed
 
 

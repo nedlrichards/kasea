@@ -10,8 +10,7 @@ class Surface:
     """"Generation of surface realizations from spectrum"""
 
 
-    def __init__(self, xbounds, ybounds, kmax, surface_dict, seed=0,
-                  threads=None):
+    def __init__(self, xbounds, ybounds, kmax, surface_dict):
         """
         Setup random generator used for realizations
         spectrum is a scalar, 1-D array or 2-D array
@@ -42,6 +41,8 @@ class Surface:
         self.spec_1D = None
         self.spec_2D = None
         self.surface_type = None
+        self.omega = None
+        self.seed = None
         self._surface_from_dict(surface_dict)
 
         # setup rng
@@ -52,6 +53,11 @@ class Surface:
         """deal with flat and sine special cases or generate a spectrum"""
         s_t = surface_dict['type']
         self.surface_type = s_t
+
+        if 'seed' in s_t:
+            self.seed = s_t['seed']
+        else:
+            self.seed = 0
 
         if s_t = 'sine':
             self.kx = 2 * pi * np.cos(surface_dict['theta']) \

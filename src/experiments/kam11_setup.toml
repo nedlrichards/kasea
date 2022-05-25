@@ -11,7 +11,7 @@ zrcr = "-15."
 zsrc = "-105."
 
 [surface]
-type = "CosPR"
+type = "sine"
 H = "2."
 L = "40."
 phase = "0."
