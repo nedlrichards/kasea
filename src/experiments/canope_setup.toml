@@ -13,5 +13,5 @@ zsrc = "-3800."
 
 [surface]
 type = "PM"
-U20 = "5."
+U20 = "0."
 decimation = "10"

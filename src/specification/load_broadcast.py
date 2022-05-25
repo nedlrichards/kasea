@@ -16,7 +16,7 @@ class Broadcast:
         self.est_z_max = est_z_max
         self.src, self.rcr = self._positions(toml_dict)
         tf = self._tf_specification(toml_dict)
-        self.c, self.fc, self.fs, self.max_dur, self.t_pulse, self.pulse = tf
+        self.c, self.fc, self.fs, self.max_dur, self.t_a_pulse, self.pulse = tf
         self.t_a, self.f_a = self._tf_axes(toml_dict)
         self.pulse_FT = np.fft.rfft(self.pulse, self.t_a.size)
         # use image arrival to determine end of time axis
@@ -27,6 +27,7 @@ class Broadcast:
         self.t_max = self.tau_img + self.max_dur
 
         self.surface, self.seed = self._setup_surface(toml_dict)
+        self.toml_dict = toml_dict
 
 
     def _positions(self, toml_dict):
@@ -62,8 +63,8 @@ class Broadcast:
         sys.modules['pulse'] = module
         spec.loader.exec_module(module)
 
-        t_pulse, pulse = module.pulse(fc, fs)
-        return c, fc, fs, max_dur, t_pulse, pulse
+        t_a_pulse, pulse = module.pulse(fc, fs)
+        return c, fc, fs, max_dur, t_a_pulse, pulse
 
     def _tf_axes(self, toml_dict):
         """Define the time and frequency axes"""
@@ -72,7 +73,7 @@ class Broadcast:
         else:
             num_front_pad = int(np.ceil(0.1e-3 * self.fs))
 
-        num_back_pad = int(np.ceil(self.t_pulse[-1] * self.fs))
+        num_back_pad = int(np.ceil(self.t_a_pulse[-1] * self.fs))
 
         numt = int(np.ceil(self.fs * self.max_dur)) \
              + num_front_pad + num_back_pad
@@ -96,7 +97,7 @@ class Broadcast:
         if 'seed' in toml_dict['surface']:
             seed = toml_dict['surface']
         else:
-            seed = None
+            seed = 0
 
         xbounds, ybounds = bound_axes(self.src, self.rcr, dx, self.est_z_max,
                                       self.max_dur, c=self.c)

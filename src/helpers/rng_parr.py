@@ -4,7 +4,7 @@ import concurrent.futures
 import numpy as np
 
 class MultithreadedRNG:
-    def __init__(self, n, scale=1, seed=None, threads=None):
+    def __init__(self, n, seed=None, threads=None):
         if threads is None:
             threads = multiprocessing.cpu_count()
         self.threads = threads
