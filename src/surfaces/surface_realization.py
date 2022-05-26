@@ -17,6 +17,7 @@ class Surface:
         """
         self.kmax = kmax
         self.dx = 2 * pi / kmax
+        self.surface_dict = surface_dict
 
         # setup x and y axes
         self.xbounds = xbounds
@@ -47,7 +48,7 @@ class Surface:
 
         # setup rng
         #self.rng = MultithreadedRNG(2 * self.N, seed=seed)
-        self.rng = np.random.default_rng(seed)
+        self.rng = np.random.default_rng(self.seed)
 
     def _surface_from_dict(self, surface_dict):
         """deal with flat and sine special cases or generate a spectrum"""
@@ -59,47 +60,41 @@ class Surface:
         else:
             self.seed = 0
 
-        if s_t = 'sine':
-            self.kx = 2 * pi * np.cos(surface_dict['theta']) \
-                    / surface_dict['L']
-            self.ky = 2 * pi * np.sin(surface_dict['theta']) \
-                    / surface_dict['L']
+        if s_t == 'sine':
+            k = 2 * pi / surface_dict['L']
+            self.kx = np.array(k * np.cos(surface_dict['theta']), ndmin=1)
+            self.ky = np.array(k * np.sin(surface_dict['theta']), ndmin=1)
             self.spec_1D = surface_dict['H'] / np.sqrt(8)
-        elif s_t = 'flat':
+        elif s_t == 'flat':
+            k = 0.
             self.kx = 0.
             self.spec_1D = 0.
-            self.spec_2D = None
-
-        if self.Ny is not None:
-
         else:
-            k = self.kx
-            self.ky = None
-            self.spec_2D = None
+            # spectrum specifications
+            Nx = self.x_a.size
+            self.kx = np.arange(Nx / 2 + 1) * self.kmax / Nx
+
+            if self.y_a is not None:
+                Ny = self.y_a.size
+                self.ky = (np.arange(Ny) - Ny // 2) * self.kmax / Ny
+
+                kx = self.kx[:, None]
+                ky = self.ky[None, :]
+                k = ne.evaluate("sqrt(kx ** 2 + ky ** 2)")
+                k_bearing = ne.evaluate("arctan2(ky, kx)")
+            else:
+                k = self.kx
 
         self.omega = ldis_deepwater(k)
         if s_t in ['sine', 'flat']:
             return
 
         # spectrum specifications
-        Nx = self.x_a.size
-        self.kx = np.arange(Nx / 2) * self.kmax / Nx
-
-        if self.y_a is not None:
-            Ny = self.y_a.size
-            self.ky = (np.arange(Ny) - Ny // 2) * self.kmax / Ny
-
-            kx = self.kx[:, None]
-            ky = self.ky[None, :]
-            k = ne.evaluate("sqrt(kx ** 2 + ky ** 2)")
-            k_bearing = ne.evaluate("arctan2(ky, kx)")
-        else:
-            k = self.kx
 
         if s_t == 'PM':
             self.spec_1D = PM(k, surface_dict['U20'])
         else:
-            raise(ValueError("spectrum is not implimented")
+            raise(ValueError("spectrum is not implimented"))
 
         if self.y_a is not None:
             delta = e_delta(k, surface_dict["U20"])
@@ -111,7 +106,13 @@ class Surface:
 
     def realization(self):
         """Generate a realization of the surface spectrum"""
-        samps = self.rng.normal(size=2 * self.N)
+        s_t = self.surface_dict['type']
+        if s_t in ['flat', 'sine']:
+            return
+
+        N = self.kx.size if self.y_a is None else self.kx.size * self.ky.size
+
+        samps = self.rng.normal(size=2 * N)
         #self.rng.fill()
         #samps = self.rng.values.view(np.complex128)
         samps = samps.view(np.complex128)
@@ -119,7 +120,7 @@ class Surface:
         # 1-D wave field
         if self.spec_2D is None:
             # inverse scaling of Heinzel et al. (2002), Eq 24
-            abs_k2 = self.spec_1D * self.N * self.kmax / 2
+            abs_k2 = self.spec_1D * self.kx.size * self.kmax / 2
             return samps * np.sqrt(abs_k2)
 
         # 2-D wave field
@@ -127,8 +128,8 @@ class Surface:
         #abs_k2 = self.spec_2D * self.Nx * self.Ny * self.kmax ** 2
         #realization = np.sqrt(abs_k2) * samps
         spec_2D = self.spec_2D
-        Nx = self.Nx
-        Ny = self.Ny
+        Nx = self.kx.size
+        Ny = self.ky.size
         kmax = self.kmax
         expr = "sqrt(spec_2D * Nx * Ny * kmax ** 2) * (samps / sqrt(2))"
         return ne.evaluate(expr)
@@ -136,14 +137,37 @@ class Surface:
 
     def surface_synthesis(self, realization, time=None, derivative=None):
         """Synthesize surface at given time"""
-        if realization is None:
-            raise(ValueError("No surface specified"))
+
+        s_t = self.surface_dict['type']
+
+        if s_t == 'flat':
+            if self.y_a is None:
+                return np.zeros(self.x_a.size, dtype=np.float64)
+            else:
+                return np.zeros((self.x_a.size, self.y_a.size),
+                                dtype=np.float64)
 
         if time is not None:
             omega = self.omega
             phase = "exp(-1j * omega * time)"
         else:
             phase = "1."
+
+
+        if s_t == 'sine':
+            phase = ne.evaluate(phase)
+            if self.y_a is None:
+                surf = np.sin(self.x_a[:, None] * self.kx[None, :] + phase)
+            else:
+                surf =  np.sin(self.x_a[:, None, None] * self.kx[None, None, :]
+                               + self.y_a[None, :, None] * self.ky[None, None, :]
+                               + phase)
+            surf = surf.sum(axis=-1)
+            return surf
+
+        if realization is None:
+            raise(ValueError("No surface specified"))
+
 
         # 1-D wave field
         if self.spec_2D is None:
