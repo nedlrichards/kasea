@@ -26,14 +26,21 @@ class Broadcast:
         r_img_2 = np.sum((self.src[:-1] - self.rcr[:-1]) ** 2) \
                   + (self.src[-1] + self.rcr[-1]) ** 2
         self.tau_img = np.sqrt(r_img_2) / self.c
-        self.t_max = self.tau_img + self.max_dur
+        self.tau_max = self.tau_img + self.max_dur
 
         # axes and surface specification
         dx = self.c / (self.fs * toml_dict['surface']['decimation'])
         kmax = 2 * pi / dx
 
-        xbounds, ybounds = bound_axes(self.src, self.rcr, dx, self.est_z_max,
-                                      self.max_dur, c=self.c)
+        bounds = bound_axes(self.src, self.rcr, dx, self.est_z_max,
+                             self.max_dur, c=self.c)
+
+        if toml_dict['geometry']['num_dim'] == 1:
+            xbounds = bounds
+            ybounds = None
+        else:
+            xbounds, ybounds = bounds
+
         self.surface = Surface(xbounds, ybounds, kmax, toml_dict['surface'])
         self.toml_dict = toml_dict
 

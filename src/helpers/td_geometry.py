@@ -5,12 +5,14 @@ from scipy.optimize import newton
 def bound_axes(src, rcr, dx, offset, max_dur, c=1500.):
     """return axes that have delay less than max_dur
     """
-    x_src, y_src, z_src = src
-    x_rcr, y_rcr, z_rcr = rcr
-
-    #TODO: assumes r_src and r_rcr have y=0
-    if np.abs(x_src) > 1e-5 or np.abs(y_src) > 1e-5 or np.abs(y_rcr) > 1e-5:
-        1/0
+    if src.size == 3:
+        x_src, y_src, z_src = src
+        x_rcr, y_rcr, z_rcr = rcr
+    else:
+        x_src, z_src = src
+        x_rcr, z_rcr = rcr
+        y_src = None
+        y_rcr = None
 
     tau_img = np.sqrt(x_rcr ** 2 + (z_src + z_rcr) ** 2)
     tau_img /= c
@@ -27,7 +29,10 @@ def bound_axes(src, rcr, dx, offset, max_dur, c=1500.):
     x_start = newton(rooter, 0)
     x_end = newton(rooter, x_rcr)
 
-    # fing y bounds
+    if y_src is None:
+        return (x_start, x_end)
+
+    # find y bounds
     x_img = z_src * x_rcr / (z_src + z_rcr)
     eps = 1e-5
     r1 = lambda x, y: sqrt(x ** 2 + y ** 2 + z_src2) / c \
@@ -39,7 +44,7 @@ def bound_axes(src, rcr, dx, offset, max_dur, c=1500.):
                             - newton(lambda y: r1(x + eps, y), y_init)) \
                             / eps
 
-    x_ymax = newton(lambda x: r2(x, -x_rcr), x_img)
+    x_ymax = newton(lambda x: r2(x, -x_rcr), x_img, tol=eps)
     y_max = newton(lambda y: r1(x_ymax, y), x_rcr)
 
     return (x_start, x_end), (-y_max, y_max)

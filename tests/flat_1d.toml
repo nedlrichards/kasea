@@ -3,11 +3,13 @@ c = "1500."
 fc = "2500."
 fs = "4625. * 2"
 max_dur = "0.01"
+pulse = "nuttall"
 
 [geometry]
 xrcr = "200."
 zrcr = "-10."
 zsrc = "-20."
+num_dim = "2"
 
 [surface]
 type = "flat"
