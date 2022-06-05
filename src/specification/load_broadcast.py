@@ -17,10 +17,15 @@ class Broadcast:
 
         self.src, self.rcr = self._positions(toml_dict)
         tf = self._tf_specification(toml_dict)
-        self.c, self.fc, self.fs, self.max_dur, self.t_a_pulse, self.pulse = tf
 
-        self.t_a, self.f_a = self._tf_axes(toml_dict)
-        self.pulse_FT = np.fft.rfft(self.pulse, self.t_a.size)
+        self.c, self.fc, self.fs, self.max_dur = tf[:3]
+        self.max_surf_dur, self.t_a_pulse, self.pulse = tf[3:]
+
+        tf = self._tf_axes(toml_dict)
+        self.t_a, self.f_a = tf[:2]
+        self.surf_t_a, self.surf_f_a = tf[2:]
+
+        self.pulse_FT = np.fft.rfft(self.pulse, self.surf_t_a.size)
 
         # use image arrival to determine end of time axis
         r_img_2 = np.sum((self.src[:-1] - self.rcr[:-1]) ** 2) \
@@ -70,17 +75,23 @@ class Broadcast:
         fs = toml_dict['t_f']['fs']
         max_dur = toml_dict['t_f']['max_dur']
 
+        if 'max_surf_dur' in toml_dict['t_f']:
+            max_surf_dur = toml_dict['t_f']['max_surf_dur']
+        else:
+            max_surf_dur = max_dur
+
         xmitt = toml_dict['t_f']['pulse']
         xmitt += '_pulse'
 
         spec = importlib.util.spec_from_file_location("pulse",
-                                             "src/experiments/" + xmitt + ".py")
+                                             "experiments/" + xmitt + ".py")
         module = importlib.util.module_from_spec(spec)
         sys.modules['pulse'] = module
         spec.loader.exec_module(module)
 
         t_a_pulse, pulse = module.pulse(fc, fs)
-        return c, fc, fs, max_dur, t_a_pulse, pulse
+
+        return c, fc, fs, max_dur, max_surf_dur, t_a_pulse, pulse
 
     def _tf_axes(self, toml_dict):
         """Define the time and frequency axes"""
@@ -91,6 +102,7 @@ class Broadcast:
 
         num_back_pad = int(np.ceil(self.t_a_pulse[-1] * self.fs))
 
+        # specifications of receiver time series
         numt = int(np.ceil(self.fs * self.max_dur)) \
              + num_front_pad + num_back_pad
 
@@ -102,7 +114,18 @@ class Broadcast:
         numf = numt // 2 + 1
         faxis = np.arange(numf) * self.fs / numt
 
-        return taxis, faxis
+        # specifications of surface time series
+        numt = int(np.ceil(self.fs * self.surf_max_dur)) \
+             + num_front_pad + num_back_pad
+
+        # compute time and frequency axes
+        surf_taxis = np.arange(numt) * dt
+        surf_taxis -= dt * num_front_pad
+
+        numf = numt // 2 + 1
+        surf_faxis = np.arange(numf) * self.fs / numt
+
+        return taxis, faxis, surf_taxis, surf_faxis
 
     def _setup_surface(self, toml_dict):
         """Use scatter duration to bound surface integration"""

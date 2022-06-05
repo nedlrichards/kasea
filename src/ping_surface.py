@@ -5,13 +5,14 @@ from os.path import join
 import copy
 
 from src import Broadcast, bound_tau_ras, Config
+from src import ne_strs
 
 
 class XMitt:
     """Run common setup and compute scatter time-series"""
 
 
-    def __init__(self, toml_file, num_sample_chunk=1e6):
+    def __init__(self, toml_file, num_sample_chunk=5e6):
         """Load xmission parameters and run basic setup"""
         self.cf = Config()
         experiment = Broadcast(toml_file)
@@ -19,12 +20,29 @@ class XMitt:
 
         self.x_a = experiment.surface.x_a
         self.y_a = experiment.surface.y_a
+
+        # receiver time axis
         self.t_a = experiment.t_a
         self.f_a = experiment.f_a
+        # seperate time axis for surface sources
+        self.surf_t_a = experiment.t_a
+        self.surf_f_a = experiment.f_a
+
+        self.tau_img = experiment.tau_img
+        self.tau_max = experiment.tau_max
+        self.surf_tau_max = experiment.surf_tau_max
+
         self.experiment = experiment
+
+        self.dx = (self.x_a[-1] - self.x_a[0]) / (self.x_a.size - 1)
 
         # make a rough estimate of number of processing chunks needed
         self.realization = None
+        if self.y_a is None:
+            self.src_type = '2D'
+        else:
+            self.src_type = '3D'
+            self.dy = (self.y_a[-1] - self.y_a[0]) / (self.y_a.size - 1)
 
 
     def generate_realization(self):
@@ -40,113 +58,115 @@ class XMitt:
         np.savez(join(self.cf.save_dir, file_name))
 
 
-    def ping_surface(self, time=0.):
+    def setup(self, time=0.):
         """Compute a surface realization and compute scatter"""
+        if self.src_type == '3D':
+            (x_src, y_src, z_src) = self.experiment.src
+            (x_rcr, y_rcr, z_rcr) = self.experiment.rcr
+        else:
+            (x_src, z_src) = self.experiment.src
+            (x_rcr, z_rcr) = self.experiment.rcr
 
-        src = self.experiment.src
-        rcr = self.experiment.rcr
-        x_a = self.x_a
-        x_src = src[0]
-        c = self.experiment.c
-        surface = self.experiment.surface
+        # 1D distances
+        dx_as = self.x_a - x_src
+        dx_ra = x_rcr - self.x_a
 
-        # isospeed delays to surface
-        surface_height = surface.surface_synthesis(self.realization, time=time)
-        dx_as = self.x_a - src[0]
-        dx_ra = rcr[0] - self.x_a
+        if self.src_type == '3D':
+            dy_as = (self.y_a - y_src)[None, :]
+            dy_ra = (y_rcr - self.y_a)[None, :]
 
-        dz_as = surface_height - src[-1]
-        dz_ra = rcr[-1] - surface_height
-
-        surface_dx = -surface.surface_synthesis(self.realization,
-                                                derivative='x', time=time)
-
-        if surface.y_a is not None:
-            dy_as = self.y_a - src[1]
-            dy_ra = rcr[1] - self.y_a
-
+            # inflate 1D dimensions
             dx_as = dx_as[:, None]
             dx_ra = dx_ra[:, None]
-            dy_ra = dy_ra[None, :]
-
-            surface_dy = -surface.surface_synthesis(self.realization,
-                                                    derivative='y', time=time)
-            proj_str = "dx_as * surface_dx + dy_as * surface_dy"
-            d_as_str = "dx_as ** 2 + dy_as ** 2"
-            # TODO: put ra differences in ne str?
-            d_ra_str = "dx_ra ** 2 + dy_ra ** 2"
-
+            i_scale = self.dx * self.dy
         else:
-            proj_str = "dx_as * surface_dx"
-            d_as_str = "dx_as ** 2"
-            d_ra_str = "dx_ra ** 2"
+            i_scale = self.dx
 
-        proj = ne.evaluate(proj_str + " + dz_as")
-        d_as = ne.evaluate("sqrt(" + d_as_str + "+ dz_as ** 2)")
-        d_ra = ne.evaluate("sqrt(" + d_ra_str + "+ dz_ra ** 2)")
+        # isospeed delays to surface
+        surface = self.experiment.surface
+        surface_height = surface.surface_synthesis(self.realization, time=time)
+        surface_dx = surface.surface_synthesis(self.realization,
+                                               derivative='x', time=time)
+        if surface.y_a is not None:
+            surface_dy = surface.surface_synthesis(self.realization,
+                                                   derivative='y', time=time)
 
-        tau_ras = ne.evaluate("(d_as + d_ra) / c")
+        dz_as = surface_height - z_src
+        dz_ra = z_rcr - surface_height
 
-        # time and frequency axes
+        # compute src and receiver distances
+        m_as = ne.evaluate(ne_strs.m_as(self.src_type))
+        m_ra = ne.evaluate(ne_strs.m_ra(self.src_type))
+
+        # normal derivative projection
+        proj = ne.evaluate(ne_strs.proj(src_type=self.src_type))
+
+        # time axis
         tau_img = self.experiment.tau_img
-
+        tau_ras = (m_as + m_ra) / self.experiment.c
         # bound integration by delay time
         tau_lim = self.experiment.tau_max
         tau_i = ne.evaluate("tau_ras < tau_lim")
 
-        proj = proj[tau_i]
+        # tau limit all arrays
         tau_ras = tau_ras[tau_i]
-        d_as = d_as[tau_i]
-        d_ra = d_ra[tau_i]
 
-        num_chunks = np.ceil(tau_i.sum() / self.num_sample_chunk)
-        1/0
+        dx_as = np.broadcast_to(dx_as, m_as.shape)[tau_i]
+        dx_ra = np.broadcast_to(dx_ra, m_as.shape)[tau_i]
+
+        if self.src_type == "3D":
+            dy_as = np.broadcast_to(dy_as, m_as.shape)[tau_i]
+            dy_ra = np.broadcast_to(dy_ra, m_as.shape)[tau_i]
+        else:
+            dy_as = None
+            dy_ra = None
+
+        dz_as = dz_as[tau_i]
+        dz_ra = dz_ra[tau_i]
+
+        m_as = m_as[tau_i]
+        m_ra = m_ra[tau_i]
+
+        proj = proj[tau_i]
+
+        specs = {'inds':np.arange(tau_i.sum()), 'i_scale':i_scale,
+                 'dx_as':dx_as, 'dy_as':dy_as, 'dz_as':dz_as,
+                 'dx_ra':dx_ra, 'dy_ra':dy_ra, 'dz_ra':dz_ra,
+                 'proj':proj, 'm_as':m_as, 'm_ra':m_ra, 'tau_ras':tau_ras}
+        return specs
 
 
-        # Kirchhoff approximation convolved with a source x_mission
-
-        front = "pulse_FT * proj / d_as"
-        phase = "exp(-2j * pi * f_a * (tau_ras - tau_img))"
-        spreading = "d_as * d_ra"
-        scale = "dx ** 2 / (8 * pi ** 2)"
-
-        ka = ne.evaluate(front + '*' + phase + '*' + spreading + '*' + scale)
-        # TODO: what axis is the summation?
-        if surface.y_a is not None:
-            1/0
-        ka = ka.sum(axis=-1)
-
-        return np.fft.irfft(ka)
-
-    def _chunk_process(self, proj, tau_ras, d_as, d_ra, num_chunks):
+    def ping_surface(self, specs):
         """perform ka calculation over a single chunk"""
-        # setup ne calculations
-        tau_img = self.experiment.tau_img
-        dx = self.experiment.surface.dx
-        pulse_FT = self.experiment.pulse_FT[:, None]
-        f_a = self.f_a[:, None]
+        ka = np.zeros(self.f_a.size, dtype=np.complex128)
 
-        # chunk array
-        p_c = np.array_spit(proj, num_chunks)
-        tau_c = np.array_spit(tau_ras, num_chunks)
-        d_as_c = np.array_spit(d_as, num_chunks)
-        d_ra = np.array_spit(d_ra, num_chunks)
+        f_a = self.f_a[None, :]
+        i_scale = specs['i_scale']
+        inds = specs['inds']
+        c = self.experiment.c
+        num_chunks = np.ceil(inds.size / self.num_sample_chunk)
 
+        chunk_inds = np.array_split(inds, num_chunks)
+        ka_str = ne_strs.dn_green_product(src_type=self.src_type)
 
-        ier = zip(np.array_spit(proj, num_chunks),
-                  np.array_spit(tau_ras, num_chunks),
-                  np.array_spit(d_as, num_chunks),
-                  np.array_spit(d_ra, num_chunks))
+        for chunk in chunk_inds:
+            dx_as = specs['dx_as'][chunk][:, None]
+            dx_ra = specs['dx_ra'][chunk][:, None]
+            if self.src_type == "3D":
+                dy_as = specs['dy_as'][chunk][:, None]
+                dy_ra = specs['dy_ra'][chunk][:, None]
+            dz_as = specs['dz_as'][chunk][:, None]
+            dz_ra = specs['dz_ra'][chunk][:, None]
+            m_as = specs['m_as'][chunk][:, None]
+            m_ra = specs['m_ra'][chunk][:, None]
+            proj = specs['proj'][chunk][:, None]
+            tau_ras = specs['tau_ras'][chunk][:, None]
 
-        front = "pulse_FT * p_c / d_as_c"
-        phase = "exp(-2j * pi * f_a * (tau_c - tau_img))"
-        spreading = "d_as_c * d_ra_c"
-        scale = "dx ** 2 / (8 * pi ** 2)"
-        ne_str = front + '*' + phase + '*' + spreading + '*' + scale
-        ka = ne.evaluate(ne_str).sum(axis=-1)
+            ka += np.sum(ne.evaluate(ka_str), axis=0)
+        ka *= i_scale
 
-        for (p_c, tau_c , d_as_c, d_ra) in ier:
-            pass
-            #ka += ne.evaluate(ne_str).sum(axis=-1)
-        ka = ne.evaluate(ne_str).sum(axis=-1)
+        # scale and shift td
+        f_shift = np.exp(2j * pi * self.f_a * \
+                (self.experiment.tau_img - self.t_a[0]))
 
+        return np.fft.irfft(ka * self.experiment.pulse_FT * f_shift)

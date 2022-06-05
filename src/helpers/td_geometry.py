@@ -18,8 +18,8 @@ def bound_axes(src, rcr, dx, offset, max_dur, c=1500.):
     tau_img /= c
     tau_lim = tau_img + max_dur
 
-    z_src2 = (z_src + copysign(offset, z_src)) ** 2
-    z_rcr2 = (z_rcr + copysign(offset, z_rcr)) ** 2
+    z_src2 = (z_src - copysign(offset, z_src)) ** 2
+    z_rcr2 = (z_rcr - copysign(offset, z_rcr)) ** 2
 
     # find x bounds
     rooter = lambda x: sqrt(x ** 2 + z_src2) / c \

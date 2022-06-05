@@ -9,7 +9,7 @@ pulse = "nuttall"
 xrcr = "200."
 zrcr = "-10."
 zsrc = "-20."
-num_dim = "1"
+num_dim = "2"
 
 [surface]
 type = "flat"
