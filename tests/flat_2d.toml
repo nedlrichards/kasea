@@ -3,6 +3,7 @@ c = "1500."
 fc = "2500."
 fs = "4625. * 2"
 max_dur = "0.01"
+max_surf_dur = "0.001"
 pulse = "nuttall"
 
 [geometry]

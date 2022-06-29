@@ -27,7 +27,7 @@ def proj(src_type='3D'):
 
 def dn_green_product(src_type='3D'):
     """string to compute product of two greens functions"""
-    phase = "exp(-2j * pi * f_a * tau_ras)"
+    phase = "exp(-2j * pi * f_a * (tau_ras - tau_shift))"
     if src_type == '3D':
         g_str = phase + " * -1j * f_a / (4 * pi * c * m_as * m_ra)"
     elif src_type == '2D':

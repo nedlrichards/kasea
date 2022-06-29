@@ -18,8 +18,8 @@ class Broadcast:
         self.src, self.rcr = self._positions(toml_dict)
         tf = self._tf_specification(toml_dict)
 
-        self.c, self.fc, self.fs, self.max_dur = tf[:3]
-        self.max_surf_dur, self.t_a_pulse, self.pulse = tf[3:]
+        self.c, self.fc, self.fs, self.max_dur = tf[:4]
+        self.max_surf_dur, self.t_a_pulse, self.pulse = tf[4:]
 
         tf = self._tf_axes(toml_dict)
         self.t_a, self.f_a = tf[:2]
@@ -30,6 +30,7 @@ class Broadcast:
         # use image arrival to determine end of time axis
         r_img_2 = np.sum((self.src[:-1] - self.rcr[:-1]) ** 2) \
                   + (self.src[-1] + self.rcr[-1]) ** 2
+
         self.tau_img = np.sqrt(r_img_2) / self.c
         self.tau_max = self.tau_img + self.max_dur
 
@@ -96,15 +97,16 @@ class Broadcast:
     def _tf_axes(self, toml_dict):
         """Define the time and frequency axes"""
         if 't_pad' in toml_dict['t_f']:
-            num_front_pad = toml_dict['t_f']['t_pad'] * self.fs
+            num_front_pad = int(np.ceil(toml_dict['t_f']['t_pad'] * self.fs))
         else:
             num_front_pad = int(np.ceil(0.1e-3 * self.fs))
 
-        num_back_pad = int(np.ceil(self.t_a_pulse[-1] * self.fs))
+        num_back_pad = self.t_a_pulse.size
 
         # specifications of receiver time series
         numt = int(np.ceil(self.fs * self.max_dur)) \
              + num_front_pad + num_back_pad
+        if numt % 2: numt += 1
 
         # compute time and frequency axes
         dt = 1 / self.fs
@@ -115,8 +117,9 @@ class Broadcast:
         faxis = np.arange(numf) * self.fs / numt
 
         # specifications of surface time series
-        numt = int(np.ceil(self.fs * self.surf_max_dur)) \
+        numt = int(np.ceil(self.fs * self.max_surf_dur)) \
              + num_front_pad + num_back_pad
+        if numt % 2: numt += 1
 
         # compute time and frequency axes
         surf_taxis = np.arange(numt) * dt

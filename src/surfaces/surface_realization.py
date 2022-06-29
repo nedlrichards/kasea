@@ -50,6 +50,7 @@ class Surface:
         #self.rng = MultithreadedRNG(2 * self.N, seed=seed)
         self.rng = np.random.default_rng(self.seed)
 
+
     def _surface_from_dict(self, surface_dict):
         """deal with flat and sine special cases or generate a spectrum"""
         s_t = surface_dict['type']
@@ -62,8 +63,10 @@ class Surface:
 
         if s_t == 'sine':
             k = 2 * pi / surface_dict['L']
-            self.kx = np.array(k * np.cos(surface_dict['theta']), ndmin=1)
-            self.ky = np.array(k * np.sin(surface_dict['theta']), ndmin=1)
+            theta = surface_dict['theta'] if 'theta' in surface_dict else 0.
+            theta = np.deg2rad(theta)
+            self.kx = np.array(k * np.cos(theta), ndmin=1)
+            self.ky = np.array(k * np.sin(theta), ndmin=1)
             self.spec_1D = surface_dict['H'] / np.sqrt(8)
         elif s_t == 'flat':
             k = 0.
@@ -147,15 +150,8 @@ class Surface:
                 return np.zeros((self.x_a.size, self.y_a.size),
                                 dtype=np.float64)
 
-        if time is not None:
-            omega = self.omega
-            phase = "exp(-1j * omega * time)"
-        else:
-            phase = "1."
-
-
         if s_t == 'sine':
-            phase = ne.evaluate(phase)
+            phase = self.omega * time
             if self.y_a is None:
                 surf = np.sin(self.x_a[:, None] * self.kx[None, :] + phase)
             else:
@@ -164,6 +160,12 @@ class Surface:
                                + phase)
             surf = surf.sum(axis=-1)
             return surf
+
+        if time is not None:
+            omega = self.omega
+            phase = "exp(-1j * omega * time)"
+        else:
+            phase = "1."
 
         if realization is None:
             raise(ValueError("No surface specified"))

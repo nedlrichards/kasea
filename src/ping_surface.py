@@ -16,7 +16,7 @@ class XMitt:
         """Load xmission parameters and run basic setup"""
         self.cf = Config()
         experiment = Broadcast(toml_file)
-        self.num_sample_chunk = num_sample_chunk
+        self.num_sample_chunk = int(num_sample_chunk)
 
         self.x_a = experiment.surface.x_a
         self.y_a = experiment.surface.y_a
@@ -24,13 +24,14 @@ class XMitt:
         # receiver time axis
         self.t_a = experiment.t_a
         self.f_a = experiment.f_a
+
         # seperate time axis for surface sources
-        self.surf_t_a = experiment.t_a
-        self.surf_f_a = experiment.f_a
+        self.surf_t_a = experiment.surf_t_a
+        self.surf_f_a = experiment.surf_f_a
+        self.dt = (self.t_a[-1] - self.t_a[0]) / (self.t_a.size - 1)
 
         self.tau_img = experiment.tau_img
         self.tau_max = experiment.tau_max
-        self.surf_tau_max = experiment.surf_tau_max
 
         self.experiment = experiment
 
@@ -110,6 +111,10 @@ class XMitt:
 
         # tau limit all arrays
         tau_ras = tau_ras[tau_i]
+        t_rcr_ref = self.tau_img + self.t_a[0]
+        num_samp_shift = np.asarray((tau_ras - t_rcr_ref) / self.dt,
+                                    dtype=np.int64)
+        t_surf_ref = t_rcr_ref + self.dt * num_samp_shift
 
         dx_as = np.broadcast_to(dx_as, m_as.shape)[tau_i]
         dx_ra = np.broadcast_to(dx_ra, m_as.shape)[tau_i]
@@ -129,7 +134,8 @@ class XMitt:
 
         proj = proj[tau_i]
 
-        specs = {'inds':np.arange(tau_i.sum()), 'i_scale':i_scale,
+        specs = {'t_rcr_ref':t_rcr_ref, 'num_samp_shift':num_samp_shift,
+                 'inds':np.arange(tau_i.sum()), 'i_scale':i_scale,
                  'dx_as':dx_as, 'dy_as':dy_as, 'dz_as':dz_as,
                  'dx_ra':dx_ra, 'dy_ra':dy_ra, 'dz_ra':dz_ra,
                  'proj':proj, 'm_as':m_as, 'm_ra':m_ra, 'tau_ras':tau_ras}
@@ -138,35 +144,37 @@ class XMitt:
 
     def ping_surface(self, specs):
         """perform ka calculation over a single chunk"""
-        ka = np.zeros(self.f_a.size, dtype=np.complex128)
-
-        f_a = self.f_a[None, :]
-        i_scale = specs['i_scale']
-        inds = specs['inds']
-        c = self.experiment.c
-        num_chunks = np.ceil(inds.size / self.num_sample_chunk)
-
-        chunk_inds = np.array_split(inds, num_chunks)
+        # specification of ka integrand
         ka_str = ne_strs.dn_green_product(src_type=self.src_type)
 
-        for chunk in chunk_inds:
-            dx_as = specs['dx_as'][chunk][:, None]
-            dx_ra = specs['dx_ra'][chunk][:, None]
-            if self.src_type == "3D":
-                dy_as = specs['dy_as'][chunk][:, None]
-                dy_ra = specs['dy_ra'][chunk][:, None]
-            dz_as = specs['dz_as'][chunk][:, None]
-            dz_ra = specs['dz_ra'][chunk][:, None]
-            m_as = specs['m_as'][chunk][:, None]
-            m_ra = specs['m_ra'][chunk][:, None]
-            proj = specs['proj'][chunk][:, None]
-            tau_ras = specs['tau_ras'][chunk][:, None]
+        num_t_a = self.t_a.size
+        ka = np.zeros(self.t_a.size + self.surf_t_a.size, dtype=np.float64)
 
-            ka += np.sum(ne.evaluate(ka_str), axis=0)
-        ka *= i_scale
+        c = self.experiment.c
+        f_a = self.surf_f_a[:, None]
 
-        # scale and shift td
-        f_shift = np.exp(2j * pi * self.f_a * \
-                (self.experiment.tau_img - self.t_a[0]))
+        # chunk by integer sample shift
 
-        return np.fft.irfft(ka * self.experiment.pulse_FT * f_shift)
+        nss = specs['num_samp_shift']
+        nss_i = np.arange(specs['num_samp_shift'].min(),
+                          specs['num_samp_shift'].max() + 1)
+
+        for i in nss_i:
+            chunk = nss == i
+
+            proj = specs['proj'][chunk][None, :]
+
+            tau_ras = specs['tau_ras'][chunk][None, :]
+            tau_shift = specs['t_rcr_ref'] + i * self.dt
+
+            m_as = specs['m_as'][chunk][None, :]
+            m_ra = specs['m_ra'][chunk][None, :]
+
+            surf_FT = np.sum(self.experiment.pulse_FT[:, None] * ne.evaluate(ka_str),
+                             axis=-1)
+            surf_ts = np.fft.irfft(surf_FT)
+            ka[i: i + surf_ts.size] += surf_ts
+
+        ka *= specs['i_scale']
+
+        return ka[:self.t_a.size]
