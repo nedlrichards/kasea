@@ -2,6 +2,7 @@ import numpy as np
 from math import pi
 import matplotlib.pyplot as plt
 from scipy.special import hankel2
+from scipy.signal import hilbert
 
 from src import XMitt
 
@@ -28,7 +29,6 @@ p_img_FT = -(1j / 4) * pulse_FT \
 
 p_img_FT[0] = 0
 p_img_1D = np.fft.irfft(p_img_FT)
-#p_img_1D = np.fft.irfft(p_img_FT * np.exp(-3j * pi / 4))
 
 p_img_FT = -(pulse_FT / (4 * pi * c * tau_img)) \
         * np.exp(-2j * pi * xmitt.f_a * -xmitt.t_a[0])
@@ -38,6 +38,10 @@ p_img_2D = np.fft.irfft(p_img_FT)
 
 p_ref_1D = np.abs(hankel2(0, 2 * pi * xmitt.fc * xmitt.experiment.tau_img) / 4)
 p_ref_2D = 1 / (4 * pi * c * tau_img)
+
+# add phase shift to 1D results
+ts_ka_1D = np.real(hilbert(ts_ka_1D) * np.exp(-3j * pi / 4))
+p_img_1D = np.real(hilbert(p_img_1D) * np.exp(-3j * pi / 4))
 
 fig, ax = plt.subplots()
 ax.plot(xmitt.t_a, ts_ka_1D / p_ref_1D)

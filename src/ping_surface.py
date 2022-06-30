@@ -48,6 +48,24 @@ class XMitt:
             self.dy = (self.y_a[-1] - self.y_a[0]) / (self.y_a.size - 1)
 
 
+    def __call__(self):
+        """loop through a sequence of wave realizations"""
+        self.generate_realization()
+        if self.experiment.surface.dt is None:
+            1/0
+        wave_time = np.arange(self.experiment.surface.num_snaps) \
+                  * self.experiment.surface.dt
+
+        p_sca = []
+        for wt in wave_time:
+            specs = self.setup(time=wt)
+            ping = self.ping_surface(specs)
+            p_sca.append(ping)
+        p_sca = np.array(p_sca)
+
+        return wave_time, p_sca
+
+
     def generate_realization(self):
         """Generate new surface realization"""
         self.realization = self.experiment.surface.realization()

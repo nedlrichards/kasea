@@ -2,6 +2,7 @@ import numpy as np
 from math import pi
 import matplotlib.pyplot as plt
 from scipy.special import hankel2
+from scipy.signal import hilbert
 import numexpr as ne
 from src import ne_strs
 
@@ -13,6 +14,11 @@ xmitt = XMitt('tests/sine_1d.toml', num_sample_chunk=5e6)
 specs = xmitt.setup()
 
 ts_ka_1D = xmitt.ping_surface(specs)
+
+xmitt = XMitt('tests/sine_2d.toml', num_sample_chunk=5e6)
+specs = xmitt.setup()
+
+ts_ka_2D = xmitt.ping_surface(specs)
 
 # explicit computation
 ka_str = ne_strs.dn_green_product(src_type=xmitt.src_type)
@@ -56,11 +62,6 @@ igrand = proj * phase / (4 * pi * np.sqrt(m_as * m_ra))
 ts_test_1D = np.fft.irfft(np.sum(pulse_FT[None, :] * igrand, axis=0))
 ts_test_1D *= xmitt.dx
 
-xmitt = XMitt('tests/sine_2d.toml', num_sample_chunk=5e6)
-specs = xmitt.setup()
-
-ts_ka_2D = xmitt.ping_surface(specs)
-
 p_ref_1D = np.abs(hankel2(0, 2 * pi * xmitt.fc * xmitt.experiment.tau_img) / 4)
 p_ref_2D = 1 / (4 * pi * c * xmitt.tau_img)
 
@@ -68,6 +69,10 @@ igrand = np.exp(-1j * 3 * pi / 4) * np.sqrt(f_a / c) * proj * phase \
        / (4 * pi * np.sqrt((m_as + m_ra) * m_as * m_ra))
 ts_test_sta = np.fft.irfft(np.sum(pulse_FT[None, :] * igrand, axis=0))
 ts_test_sta *= xmitt.dx
+
+# add phase shift to 1D results
+ts_ka_1D = np.real(hilbert(ts_ka_1D) * np.exp(-3j * pi / 4))
+ts_test_1D = np.real(hilbert(ts_test_1D) * np.exp(-3j * pi / 4))
 
 fig, ax = plt.subplots()
 ax.plot(xmitt.t_a, ts_ka_1D / p_ref_1D)

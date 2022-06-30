@@ -43,29 +43,30 @@ class Surface:
         self.surface_type = None
         self.omega = None
         self.seed = None
+        self.dt = None
+        self.num_snaps = None
         self._surface_from_dict(surface_dict)
 
         # setup rng
         self.rng = np.random.default_rng(self.seed)
 
 
-    def _surface_from_dict(self, surface_dict):
+    def _surface_from_dict(self, sd):
         """deal with flat and sine special cases or generate a spectrum"""
-        s_t = surface_dict['type']
+        s_t = sd['type']
         self.surface_type = s_t
 
-        if 'seed' in s_t:
-            self.seed = s_t['seed']
-        else:
-            self.seed = 0
+        self.seed = sd['seed'] if 'seed' in sd else 0
+        self.dt = sd['dt'] if 'dt' in sd else None
+        self.num_snaps = sd['num_snaps'] if 'num_snaps' in sd else 1
 
         if s_t == 'sine':
-            k = np.array(2 * pi / surface_dict['L'], ndmin=1)
-            theta = surface_dict['theta'] if 'theta' in surface_dict else 0.
+            k = np.array(2 * pi / sd['L'], ndmin=1)
+            theta = sd['theta'] if 'theta' in sd else 0.
             theta = np.deg2rad(theta)
             self.kx = np.array(k * np.cos(theta), ndmin=1)
             self.ky = np.array(k * np.sin(theta), ndmin=1)
-            self.spec_1D = surface_dict['H'] / np.sqrt(8)
+            self.spec_1D = sd['H'] / np.sqrt(8)
         elif s_t == 'flat':
             k = 0.
             self.kx = 0.
@@ -93,12 +94,12 @@ class Surface:
         # spectrum specifications
 
         if s_t == 'PM':
-            self.spec_1D = PM(k, surface_dict['U20'])
+            self.spec_1D = PM(k, sd['U20'])
         else:
             raise(ValueError("spectrum is not implimented"))
 
         if self.y_a is not None:
-            delta = e_delta(k, surface_dict["U20"])
+            delta = e_delta(k, sd["U20"])
             self.spec_2D = directional_spectrum(delta,
                                                 k,
                                                 k_bearing,
