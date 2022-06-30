@@ -2,7 +2,6 @@ import numpy as np
 import numexpr as ne
 from math import pi
 
-from src.helpers import MultithreadedRNG
 from src.surfaces import PM, ldis_deepwater
 from src.surfaces import e_delta, directional_spectrum
 
@@ -47,7 +46,6 @@ class Surface:
         self._surface_from_dict(surface_dict)
 
         # setup rng
-        #self.rng = MultithreadedRNG(2 * self.N, seed=seed)
         self.rng = np.random.default_rng(self.seed)
 
 
@@ -62,7 +60,7 @@ class Surface:
             self.seed = 0
 
         if s_t == 'sine':
-            k = 2 * pi / surface_dict['L']
+            k = np.array(2 * pi / surface_dict['L'], ndmin=1)
             theta = surface_dict['theta'] if 'theta' in surface_dict else 0.
             theta = np.deg2rad(theta)
             self.kx = np.array(k * np.cos(theta), ndmin=1)
@@ -151,15 +149,21 @@ class Surface:
                                 dtype=np.float64)
 
         if s_t == 'sine':
-            phase = self.omega * time
             if self.y_a is None:
-                surf = np.sin(self.x_a[:, None] * self.kx[None, :] + phase)
+                phase = self.x_a[:, None] * self.kx[None, :] \
+                      + self.omega[None, :] * time
             else:
-                surf =  np.sin(self.x_a[:, None, None] * self.kx[None, None, :]
-                               + self.y_a[None, :, None] * self.ky[None, None, :]
-                               + phase)
+                phase = self.x_a[:, None, None] * self.kx[None, None, :] \
+                      + self.y_a[None, :, None] * self.ky[None, None, :] \
+                      + self.omega[None, None, :] * time
+
+            surf = self.spec_1D * np.exp(1j * phase) * np.sqrt(2)
+            if derivative == 'x':
+                surf *= 1j * self.kx[..., :]
+            elif derivative == 'y':
+                surf *= 1j * self.ky[..., :]
             surf = surf.sum(axis=-1)
-            return surf
+            return np.imag(surf)
 
         if time is not None:
             omega = self.omega

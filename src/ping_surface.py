@@ -18,6 +18,8 @@ class XMitt:
         experiment = Broadcast(toml_file)
         self.num_sample_chunk = int(num_sample_chunk)
 
+        self.fc = experiment.fc
+
         self.x_a = experiment.surface.x_a
         self.y_a = experiment.surface.y_a
 
@@ -114,7 +116,6 @@ class XMitt:
         t_rcr_ref = self.tau_img + self.t_a[0]
         num_samp_shift = np.asarray((tau_ras - t_rcr_ref) / self.dt,
                                     dtype=np.int64)
-        t_surf_ref = t_rcr_ref + self.dt * num_samp_shift
 
         dx_as = np.broadcast_to(dx_as, m_as.shape)[tau_i]
         dx_ra = np.broadcast_to(dx_ra, m_as.shape)[tau_i]
@@ -134,8 +135,9 @@ class XMitt:
 
         proj = proj[tau_i]
 
-        specs = {'t_rcr_ref':t_rcr_ref, 'num_samp_shift':num_samp_shift,
-                 'inds':np.arange(tau_i.sum()), 'i_scale':i_scale,
+        specs = {'t_rcr_ref':t_rcr_ref,
+                 'num_samp_shift':num_samp_shift,
+                 'i_scale':i_scale,
                  'dx_as':dx_as, 'dy_as':dy_as, 'dz_as':dz_as,
                  'dx_ra':dx_ra, 'dy_ra':dy_ra, 'dz_ra':dz_ra,
                  'proj':proj, 'm_as':m_as, 'm_ra':m_ra, 'tau_ras':tau_ras}
@@ -153,28 +155,83 @@ class XMitt:
         c = self.experiment.c
         f_a = self.surf_f_a[:, None]
 
-        # chunk by integer sample shift
+        # sort by tau and then chunck computation
 
         nss = specs['num_samp_shift']
-        nss_i = np.arange(specs['num_samp_shift'].min(),
-                          specs['num_samp_shift'].max() + 1)
+        nss_i = np.argsort(nss)
 
-        for i in nss_i:
-            chunk = nss == i
+        pulse = self.experiment.pulse_FT[:, None]
+
+        ka = np.zeros(self.t_a.size + self.surf_t_a.size, dtype=np.float64)
+        i_start = 0
+        i_next = self._next_ind(nss, nss_i, i_start)
+
+        while i_next is not None:
+
+            chunk = nss_i[i_start: i_next[-1]]
 
             proj = specs['proj'][chunk][None, :]
-
             tau_ras = specs['tau_ras'][chunk][None, :]
-            tau_shift = specs['t_rcr_ref'] + i * self.dt
-
+            n_vals = nss[chunk]
+            D_tau = specs['num_samp_shift'][chunk][None, :] * self.dt
+            tau_shift = specs['t_rcr_ref'] + D_tau
             m_as = specs['m_as'][chunk][None, :]
             m_ra = specs['m_ra'][chunk][None, :]
 
-            surf_FT = np.sum(self.experiment.pulse_FT[:, None] * ne.evaluate(ka_str),
-                             axis=-1)
-            surf_ts = np.fft.irfft(surf_FT)
-            ka[i: i + surf_ts.size] += surf_ts
+            ka_FT = ne.evaluate("pulse * " + ka_str)
+
+            sum_inds = i_next - i_start
+            last_i = 0
+
+            for s_i in sum_inds:
+
+                surf_FT = np.sum(ka_FT[:, last_i: s_i], axis=-1)
+                surf_ts = np.fft.irfft(surf_FT)
+
+                ka_i = n_vals[last_i]
+                ka[ka_i: ka_i + surf_ts.size] += surf_ts
+
+                last_i = s_i
+
+
+            i_start = i_next[-1]
+            i_next = self._next_ind(nss, nss_i, i_start)
 
         ka *= specs['i_scale']
+        ka = ka[:self.t_a.size]
+        return ka
 
-        return ka[:self.t_a.size]
+
+    def _next_ind(self, nss, nss_i, i_start):
+        """manage solution chunck size by index shift"""
+        i_num = nss[nss_i[i_start]]
+
+        j = 1
+        i_max = min(i_start + j * self.num_sample_chunk, nss.size - 1)
+
+        i_test = nss[nss_i[i_max]]
+        while i_test == i_num:
+            if i_max == nss.size - 1:
+                break
+            j += 1
+            i_max = min(i_start + j * self.num_sample_chunk, nss.size - 1)
+            i_test = nss[nss_i[i_max]]
+
+        n_range = nss[nss_i[i_start :i_max]]
+
+        end_off = 0
+        inds = [0]
+        for i in range(i_num + 1, i_test + 1):
+            end_off = np.argmax(n_range[inds[-1]:] == i)
+            inds.append(inds[-1] + end_off)
+
+        # last index case
+        if nss[nss_i[inds[-1]]] == nss[nss_i[-1]]:
+            inds.append(nss.size - 1)
+
+        if len(inds) == 1:
+            return None
+
+        inds = np.array(inds)[1:]
+
+        return i_start + inds
