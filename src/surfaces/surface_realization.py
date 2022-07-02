@@ -212,14 +212,4 @@ class Surface:
         return surface
 
 
-    def rotate_surface(self, surface):
-        """Rotate surface around specular reflection point"""
-        thetas = np.array(self.theta, ndmin=1)
-        for t in thetas:
-            if abs(t) > 1e-6:
-                import time
-                st = time.time()
-                ier = RectBivariateSpline(self.x_a, self.y_a, surface)
-                print(time.time() - st)
-                1/0
 

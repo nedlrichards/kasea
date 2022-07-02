@@ -6,7 +6,6 @@ import sys
 import importlib.util
 
 from src.surfaces import Surface
-from src.helpers import td_geometry, bound_axes
 
 class Broadcast:
     """Load up a test scenario"""
