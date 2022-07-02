@@ -36,10 +36,10 @@ def PM(axis_in, U20, is_omega=False):
     return pm
 
 
-def directional_spectrum(delta, k, k_bearing, omni_spectrum, theta):
+def directional_spectrum(delta, k, k_bearing, omni_spectrum):
     """calculate spreading function from delta"""
 
-    spreading = ne.evaluate("(1 + delta * cos(2 * k_bearing + theta)) / (2 * pi)")
+    spreading = ne.evaluate("(1 + delta * cos(2 * k_bearing)) / (2 * pi)")
 
     # multiply omni-directional spectrum with spreading function
     d_spec = ne.evaluate("omni_spectrum * spreading / k")

@@ -12,9 +12,13 @@ class XMitt:
     """Run common setup and compute scatter time-series"""
 
 
-    def __init__(self, toml_file, num_sample_chunk=5e6):
+    def __init__(self, toml_file, num_sample_chunk=5e6, save_dir=None):
         """Load xmission parameters and run basic setup"""
-        self.cf = Config()
+        if save_dir is not None:
+            self.cf = Config(save_dir=save_dir)
+        else:
+            self.cf = Config()
+        self.save_name = toml_file.split('/')[-1].split('.')[0]
         experiment = Broadcast(toml_file)
         self.num_sample_chunk = int(num_sample_chunk)
 
@@ -63,6 +67,8 @@ class XMitt:
             p_sca.append(ping)
         p_sca = np.array(p_sca)
 
+        self.save(p_sca, t_a_wave=wave_time)
+
         return wave_time, p_sca
 
 
@@ -71,12 +77,12 @@ class XMitt:
         self.realization = self.experiment.surface.realization()
 
 
-    def save(self, file_name, p_sca, time=None):
+    def save(self, p_sca, t_a_wave=None):
         """Save scattered pressure allong with toml meta data"""
         save_dict = copy.deepcopy(self.experiment.toml_dict)
         save_dict['p_sca'] = p_sca
-        save_dict['time'] = time
-        np.savez(join(self.cf.save_dir, file_name))
+        save_dict['t_a_wave'] = t_a_wave
+        np.savez(join(self.cf.save_dir, self.save_name))
 
 
     def setup(self, time=0.):

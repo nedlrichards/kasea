@@ -47,7 +47,11 @@ def bound_axes(src, rcr, dx, offset, max_dur, c=1500.):
     x_ymax = newton(lambda x: r2(x, -x_rcr), x_img, tol=eps)
     y_max = newton(lambda y: r1(x_ymax, y), x_rcr)
 
-    return (x_start, x_end), (-y_max, y_max)
+    #return (x_start, x_end), (-y_max, y_max)
+
+    # return symetric axes
+    dx_axis = (x_end - x_start + 2 * dx)
+    return (x_start, x_end), (-dx_axis / 2, dx_axis / 2)
 
 
 def bound_tau_ras(x_a, y_a, eta, src, rcr, t_max):
