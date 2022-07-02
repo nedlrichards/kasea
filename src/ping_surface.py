@@ -43,7 +43,6 @@ class XMitt:
 
         self.dx = (self.x_a[-1] - self.x_a[0]) / (self.x_a.size - 1)
 
-        # make a rough estimate of number of processing chunks needed
         self.realization = None
         if self.y_a is None:
             self.src_type = '2D'
@@ -53,29 +52,7 @@ class XMitt:
 
 
     def __call__(self):
-        """loop through a sequence of wave realizations"""
-        self.generate_realization()
-        if self.experiment.surface.dt is None:
-            1/0
-        wave_time = np.arange(self.experiment.surface.num_snaps) \
-                  * self.experiment.surface.dt
-
-        p_sca = []
-        for wt in wave_time:
-            specs = self.setup(time=wt)
-            ping = self.ping_surface(specs)
-            p_sca.append(ping)
-        p_sca = np.array(p_sca)
-
-        self.save(p_sca, t_a_wave=wave_time)
-
-        return wave_time, p_sca
-
-
-    def generate_realization(self):
-        """Generate new surface realization"""
-        self.realization = self.experiment.surface.realization()
-
+        pass
 
     def save(self, p_sca, t_a_wave=None):
         """Save scattered pressure allong with toml meta data"""

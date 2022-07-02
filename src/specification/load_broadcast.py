@@ -12,6 +12,7 @@ class Broadcast:
     """Load up a test scenario"""
     def __init__(self, toml_file):
         """scatter calculation specification load and basic setup"""
+        self.toml_file = toml_file
         toml_dict = load_broadcast(toml_file)
         self.est_z_max = toml_dict['surface']['z_max']
 
@@ -35,19 +36,7 @@ class Broadcast:
         self.tau_max = self.tau_img + self.max_dur
 
         # axes and surface specification
-        dx = self.c / (self.fs * toml_dict['surface']['decimation'])
-        kmax = 2 * pi / dx
-
-        bounds = bound_axes(self.src, self.rcr, dx, self.est_z_max,
-                             self.max_dur, c=self.c)
-
-        if toml_dict['geometry']['num_dim'] == 1:
-            xbounds = bounds
-            ybounds = None
-        else:
-            xbounds, ybounds = bounds
-
-        self.surface = Surface(xbounds, ybounds, kmax, toml_dict['surface'])
+        self.dx = self.c / (self.fs * toml_dict['surface']['decimation'])
         self.toml_dict = toml_dict
 
 
@@ -166,6 +155,13 @@ def load_broadcast(toml_file):
         if k in ['type']:
             # these keys are not parsed by numexpr
             surface[k] = v
+        elif k == 'theta':
+            try:
+                surface[k] = ne.evaluate(v)[()]
+            except TypeError:
+                num_list = v.strip('[]').split(',')
+                num_list = np.array([ne.evaluate(n.strip()) for n in num_list])
+                surface[k] = num_list
         else:
             surface[k] = ne.evaluate(v)[()]
 

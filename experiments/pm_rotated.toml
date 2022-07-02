@@ -13,9 +13,11 @@ zsrc = "-20."
 num_dim = "2"
 
 [surface]
-type = "sine"
+type = "PM"
 U20 = "5"
 L = "40."
-theta = "0."
+dt = "0.1"
+num_snaps = "50"
+theta = "[0., 15., 45., 90.]"
 decimation = "10"
 z_max = "1."

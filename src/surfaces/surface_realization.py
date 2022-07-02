@@ -1,6 +1,7 @@
 import numpy as np
 import numexpr as ne
 from math import pi
+from scipy.interpolate import RectBivariateSpline
 
 from src.surfaces import PM, ldis_deepwater
 from src.surfaces import e_delta, directional_spectrum
@@ -40,6 +41,7 @@ class Surface:
         self.ky = None
         self.spec_1D = None
         self.spec_2D = None
+        self.theta = None
         self.surface_type = None
         self.omega = None
         self.seed = None
@@ -51,6 +53,13 @@ class Surface:
         self.rng = np.random.default_rng(self.seed)
 
 
+    def __call__(self):
+        """Generate and save surfaces"""
+        if self.surface_type in ['sine', 'flat']:
+            # these surfaces do not require precomputing
+            return
+
+
     def _surface_from_dict(self, sd):
         """deal with flat and sine special cases or generate a spectrum"""
         s_t = sd['type']
@@ -60,9 +69,11 @@ class Surface:
         self.dt = sd['dt'] if 'dt' in sd else None
         self.num_snaps = sd['num_snaps'] if 'num_snaps' in sd else 1
 
+        theta = sd['theta'] if 'theta' in sd else 0.
+        self.theta = theta
+
         if s_t == 'sine':
             k = np.array(2 * pi / sd['L'], ndmin=1)
-            theta = sd['theta'] if 'theta' in sd else 0.
             theta = np.deg2rad(theta)
             self.kx = np.array(k * np.cos(theta), ndmin=1)
             self.ky = np.array(k * np.sin(theta), ndmin=1)
@@ -92,7 +103,6 @@ class Surface:
             return
 
         # spectrum specifications
-
         if s_t == 'PM':
             self.spec_1D = PM(k, sd['U20'])
         else:
@@ -175,12 +185,11 @@ class Surface:
         if realization is None:
             raise(ValueError("No surface specified"))
 
-
         # 1-D wave field
         if self.spec_2D is None:
             if derivative:
                 kx = self.kx
-                phase += " * -1j * kx"
+                phase += " * 1j * kx"
             phase += " * realization"
             surface = np.fft.irfft(ne.evaluate(phase))
 
@@ -189,14 +198,28 @@ class Surface:
             if derivative is not None:
                 if derivative == 'x':
                     kx = self.kx[:, None]
-                    phase += " * -1j * kx "
+                    phase += " * 1j * kx "
                 elif derivative == 'y':
                     ky = self.ky[None, :]
-                    phase += " * -1j * ky"
+                    phase += " * 1j * ky"
                 else:
                     raise(ValueError('Derivative must be either x or y'))
             phase += " * realization"
             spec = ne.evaluate(phase)
             surface = np.fft.irfft2(np.fft.ifftshift(spec, axes=1),
                                     axes=(1,0))
+
         return surface
+
+
+    def rotate_surface(self, surface):
+        """Rotate surface around specular reflection point"""
+        thetas = np.array(self.theta, ndmin=1)
+        for t in thetas:
+            if abs(t) > 1e-6:
+                import time
+                st = time.time()
+                ier = RectBivariateSpline(self.x_a, self.y_a, surface)
+                print(time.time() - st)
+                1/0
+
