@@ -21,18 +21,17 @@ class Surface:
 
         # setup x and y axes
         self.xbounds = xbounds
+        n_start = xbounds[0] // self.dx
         Nx = int((xbounds[1] - xbounds[0]) / self.dx + 2)
-
         if Nx % 2: Nx += 1
-        x_i = np.arange(Nx)
-        self.x_a = x_i * self.dx + xbounds[0] - self.dx
+        self.x_a = (np.arange(Nx) + n_start - 1) * self.dx
 
         self.ybounds = ybounds
         if ybounds is not None:
+            n_start = ybounds[0] // self.dx
             Ny = int((ybounds[1] - ybounds[0]) / self.dx + 2)
             if Ny % 2: Ny += 1
-            y_i = np.arange(Ny)
-            self.y_a = y_i * self.dx + ybounds[0] - self.dx
+            self.y_a = (np.arange(Ny) + n_start - 1) * self.dx
         else:
             self.y_a = None
 

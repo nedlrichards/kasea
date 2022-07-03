@@ -7,6 +7,7 @@ import importlib.util
 import os
 
 from src.surfaces import Surface
+from scipy.interpolate import RectBivariateSpline
 from src.helpers import bound_axes
 
 class SurfGen:
@@ -18,13 +19,14 @@ class SurfGen:
         self.broadcast = broadcast
         self.dx = broadcast.dx
         kmax = 2 * pi / self.dx
+        self.theta = broadcast.toml_dict['surface']['theta']
 
         inner_bounds =  bound_axes(broadcast.src, broadcast.rcr, broadcast.dx,
                                    broadcast.est_z_max, broadcast.max_dur,
                                    c=broadcast.c, to_rotate=False)
 
         if 'theta' in broadcast.toml_dict['surface'] \
-                and np.any(np.abs(broadcast.toml_dict['surface']['theta'])) > 1e-5:
+                and np.any(np.abs(self.theta)) > 1e-5:
             self.to_rotate = True
             bounds = bound_axes(broadcast.src, broadcast.rcr, self.dx,
                                 broadcast.est_z_max, broadcast.max_dur,
@@ -35,23 +37,24 @@ class SurfGen:
 
         # setup x and y axes based on inner bounds
         xbounds = inner_bounds[0]
+        n_start = xbounds[0] // self.dx
         Nx = int((xbounds[1] - xbounds[0]) / self.dx + 2)
 
         if Nx % 2: Nx += 1
-        x_i = np.arange(Nx)
-        self.x_a = x_i * self.dx + xbounds[0] - self.dx
+        self.x_a = (np.arange(Nx) + n_start - 1) * self.dx
 
         ybounds = inner_bounds[1]
+        n_start = ybounds[0] // self.dx
         Ny = int((ybounds[1] - ybounds[0]) / self.dx + 2)
         if Ny % 2: Ny += 1
-        y_i = np.arange(Ny)
-        self.y_a = y_i * self.dx + ybounds[0] - self.dx
+        self.y_a = (np.arange(Ny) + n_start - 1) * self.dx
 
 
         self.x_img = broadcast.src[-1] * broadcast.rcr[0] \
                    / (broadcast.rcr[-1] + broadcast.src[-1])
 
-        self.rel_coords = np.array(np.meshgrid(self.x_a - self.x_img, self.y_a))
+        X, Y = np.meshgrid(self.x_a - self.x_img, self.y_a)
+        self.rel_coords = np.concatenate([X[:, :, None], Y[:, :, None]], axis=2)
 
         self.surface = Surface(bounds[0], bounds[1], kmax,
                                broadcast.toml_dict['surface'])
@@ -100,7 +103,7 @@ class SurfGen:
         for wt in wave_time:
             surf = self.surface.surface_synthesis(realization, time=wt)
             if self.to_rotate:
-                self.rotate_surface(surf)
+                surfaces = list(self.rotate_surface(surf))
 
     def rotate_surface(self, surface):
         """Rotate surface around specular reflection point"""
@@ -108,11 +111,20 @@ class SurfGen:
 
         for t in np.array(self.theta, ndmin=1):
             if abs(t) < 1e-6:
-                1/0
-                return rotated_grid
-            t = np.deg2rad(theta)
-            R = np.array([[np.cos(t), -np.sin(t)], [np.sin(t), np.cos(t)]])
+                grid_x_i = (self.surface.x_a >= self.x_a[0]) \
+                         & (self.surface.x_a <= self.x_a[-1])
+                grid_y_i = (self.surface.y_a >= self.y_a[0]) \
+                         & (self.surface.y_a <= self.y_a[-1])
+                rotated_grid = surface[np.ix_(grid_x_i, grid_y_i)]
+                yield rotated_grid
+            else:
+                t_d = np.deg2rad(t)
+                R = np.array([[np.cos(t_d), -np.sin(t_d)],
+                              [np.sin(t_d), np.cos(t_d)]])
+                x_shift = (self.x_a[:, None] - self.x_img) * R[0]
+                y_shift = self.y_a[:, None] * R[1]
+                # TODO: haven't gotten this quite right
+                rot_coords = x_shift[:, None, :] + y_shift[None, :, :]
 
-            rot_coords = R @ self.rel_coords
-            rotated_surface = ier(rot_coords)
+                rotated_surface = ier(rot_coords)
 
