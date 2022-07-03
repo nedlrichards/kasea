@@ -52,13 +52,6 @@ class Surface:
         self.rng = np.random.default_rng(self.seed)
 
 
-    def __call__(self):
-        """Generate and save surfaces"""
-        if self.surface_type in ['sine', 'flat']:
-            # these surfaces do not require precomputing
-            return
-
-
     def _surface_from_dict(self, sd):
         """deal with flat and sine special cases or generate a spectrum"""
         s_t = sd['type']
@@ -167,7 +160,8 @@ class Surface:
                       + self.y_a[None, :, None] * self.ky[None, None, :] \
                       + self.omega[None, None, :] * time
 
-            surf = self.spec_1D * np.exp(1j * phase) * np.sqrt(2)
+            spec_1d = self.spec_1d
+            surf = ne.evaluate("spec_1D * exp(1j * phase) * sqrt(2)")
             if derivative == 'x':
                 surf *= 1j * self.kx[..., :]
             elif derivative == 'y':
