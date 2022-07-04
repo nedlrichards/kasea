@@ -20,6 +20,7 @@ class XMitt:
             self.cf = Config()
         self.save_name = toml_file.split('/')[-1].split('.')[0]
         experiment = Broadcast(toml_file)
+        self.num_sample_chunk = int(num_sample_chunk)
 
         self.fc = experiment.fc
         self.t_a = experiment.t_a
@@ -68,21 +69,41 @@ class XMitt:
             self.dy = (self.y_a[-1] - self.y_a[0]) / (self.y_a.size - 1)
 
 
-    def save(self, p_sca, t_a_wave=None):
-        """Save scattered pressure allong with toml meta data"""
-        save_dict = copy.deepcopy(self.experiment.toml_dict)
-        save_dict['p_sca'] = p_sca
-        save_dict['t_a_wave'] = t_a_wave
-        np.savez(join(self.cf.save_dir, self.save_name))
-
-
     def one_time(self):
-        """Compute a surface realization and compute scatter"""
+        """Save scattered pressure allong with toml meta data"""
         surf = self.surface()
-        surface_height = surf[0]
-        surface_dx = surf[1]
+        p_sca = []
+
+        for spec in self._angle_gen(surf):
+            p_sca.append(self.ping_surface(spec))
+        p_sca = np.array(p_sca)
+
+        save_size = 300
+        save_surf = surf[0]
+        decimation = np.array(save_surf.shape) // save_size
+
+        save_dict = {'t_a':self.t_a}
+        save_dict['surface'] = save_surf[::decimation[0], ::decimation[1]]
+        save_dict['decimation'] = decimation
+        save_dict['x_a'] = self.x_a[::decimation[0]]
+        save_dict['y_a'] = self.y_a[::decimation[1]]
+
+
+        save_dict['p_sca'] = p_sca
+        t = self.surface.time
+        save_dict['time'] = t
+        save_path = join(self.cf.save_dir, self.save_name + f'_{int(10 * t)}')
+        np.savez(save_path, **save_dict)
+        print('saved ' + save_path)
+        return save_path
+
+
+    def _angle_gen(self, surface):
+        """Compute a surface realization and compute scatter"""
+        surface_height = surface[0]
+        surface_dx = surface[1]
         if self.y_a is not None:
-            surface_dy = surf[2]
+            surface_dy = surface[2]
 
         z_src = self.z_src
         z_rcr = self.z_rcr
