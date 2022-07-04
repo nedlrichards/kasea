@@ -7,16 +7,16 @@ max_surf_dur = "0.001"
 pulse = "nuttall"
 
 [geometry]
-xrcr = "200."
+dr = "200."
 zrcr = "-10."
 zsrc = "-20."
-num_dim = "2"
+num_dim = "3"
 
 [surface]
 type = "PM"
 U20 = "5"
 L = "40."
-dt = "0.1"
+time_step = "0.1"
 num_snaps = "50"
 theta = "[0., 15., 45., 90.]"
 decimation = "10"

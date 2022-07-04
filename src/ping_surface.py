@@ -4,7 +4,7 @@ from math import pi
 from os.path import join
 import copy
 
-from src import Broadcast, bound_tau_ras, Config
+from src import Broadcast, Surface, Config, bound_axes
 from src import ne_strs
 
 
@@ -20,39 +20,53 @@ class XMitt:
             self.cf = Config()
         self.save_name = toml_file.split('/')[-1].split('.')[0]
         experiment = Broadcast(toml_file)
-        self.num_sample_chunk = int(num_sample_chunk)
 
         self.fc = experiment.fc
-
-        self.x_a = experiment.surface.x_a
-        self.y_a = experiment.surface.y_a
-
-        # receiver time axis
         self.t_a = experiment.t_a
         self.f_a = experiment.f_a
+        self.dt = (self.t_a[-1] - self.t_a[0]) / (self.t_a.size - 1)
 
         # seperate time axis for surface sources
         self.surf_t_a = experiment.surf_t_a
         self.surf_f_a = experiment.surf_f_a
-        self.dt = (self.t_a[-1] - self.t_a[0]) / (self.t_a.size - 1)
 
+        self.z_src = experiment.z_src
+        self.z_rcr = experiment.z_rcr
+        self.dr = experiment.dr
+
+        self.dx = experiment.dx
+        self.experiment = experiment
+
+        self.x_img = self.z_src * self.dr / (self.z_src + self.z_rcr)
         self.tau_img = experiment.tau_img
         self.tau_max = experiment.tau_max
 
-        self.experiment = experiment
+        # setup surface
+        surf_dict = self.experiment.toml_dict['surface']
+        self.theta = surf_dict['theta'] if 'theta' in surf_dict else 0.
+        self.time_step = surf_dict['time_step']
 
-        self.dx = (self.x_a[-1] - self.x_a[0]) / (self.x_a.size - 1)
+        if np.any(np.abs(self.theta)) > 1e-5:
+            bounds = bound_axes(self.z_src, self.z_rcr, self.dr,
+                                experiment.est_z_max, experiment.max_dur,
+                                c=self.experiment.c, to_rotate=True)
+        else:
+            bounds = bound_axes(self.z_src, self.z_rcr, self.dr,
+                                experiment.est_z_max, experiment.max_dur,
+                                c=self.experiment.c, to_rotate=False)
 
+        self.surface = Surface(bounds[0], bounds[1], 2 * pi / self.dx, surf_dict)
         self.realization = None
+
+        self.x_a = self.surface.x_a
+        self.y_a = self.surface.y_a
+
         if self.y_a is None:
             self.src_type = '2D'
         else:
             self.src_type = '3D'
             self.dy = (self.y_a[-1] - self.y_a[0]) / (self.y_a.size - 1)
 
-
-    def __call__(self):
-        pass
 
     def save(self, p_sca, t_a_wave=None):
         """Save scattered pressure allong with toml meta data"""
@@ -62,87 +76,90 @@ class XMitt:
         np.savez(join(self.cf.save_dir, self.save_name))
 
 
-    def setup(self, time=0.):
+    def one_time(self):
         """Compute a surface realization and compute scatter"""
-        if self.src_type == '3D':
-            (x_src, y_src, z_src) = self.experiment.src
-            (x_rcr, y_rcr, z_rcr) = self.experiment.rcr
-        else:
-            (x_src, z_src) = self.experiment.src
-            (x_rcr, z_rcr) = self.experiment.rcr
+        surf = self.surface()
+        surface_height = surf[0]
+        surface_dx = surf[1]
+        if self.y_a is not None:
+            surface_dy = surf[2]
 
-        # 1D distances
-        dx_as = self.x_a - x_src
-        dx_ra = x_rcr - self.x_a
+        z_src = self.z_src
+        z_rcr = self.z_rcr
 
-        if self.src_type == '3D':
-            dy_as = (self.y_a - y_src)[None, :]
-            dy_ra = (y_rcr - self.y_a)[None, :]
 
-            # inflate 1D dimensions
-            dx_as = dx_as[:, None]
-            dx_ra = dx_ra[:, None]
-            i_scale = self.dx * self.dy
-        else:
-            i_scale = self.dx
+        for t in self.theta:
+            t = np.deg2rad(0)
+            pos_src = -self.x_img * np.array([np.cos(t), -np.sin(t)])
+            pos_rcr = (self.dr - self.x_img) * np.array([np.cos(t), -np.sin(t)])
 
-        # isospeed delays to surface
-        surface = self.experiment.surface
-        surface_height = surface.surface_synthesis(self.realization, time=time)
-        surface_dx = surface.surface_synthesis(self.realization,
-                                               derivative='x', time=time)
-        if surface.y_a is not None:
-            surface_dy = surface.surface_synthesis(self.realization,
-                                                   derivative='y', time=time)
+            (x_src, y_src) = pos_src
+            (x_rcr, y_rcr) = pos_rcr
 
-        dz_as = surface_height - z_src
-        dz_ra = z_rcr - surface_height
+            # 1D distances
+            dx_as = self.x_a - x_src
+            dx_ra = x_rcr - self.x_a
 
-        # compute src and receiver distances
-        m_as = ne.evaluate(ne_strs.m_as(self.src_type))
-        m_ra = ne.evaluate(ne_strs.m_ra(self.src_type))
+            if self.src_type == '3D':
+                dy_as = (self.y_a - y_src)[None, :]
+                dy_ra = (y_rcr - self.y_a)[None, :]
 
-        # normal derivative projection
-        proj = ne.evaluate(ne_strs.proj(src_type=self.src_type))
+                # inflate 1D dimensions
+                dx_as = dx_as[:, None]
+                dx_ra = dx_ra[:, None]
+                i_scale = self.dx * self.dy
+            else:
+                i_scale = self.dx
 
-        # time axis
-        tau_img = self.experiment.tau_img
-        tau_ras = (m_as + m_ra) / self.experiment.c
-        # bound integration by delay time
-        tau_lim = self.experiment.tau_max
-        tau_i = ne.evaluate("tau_ras < tau_lim")
+            # isospeed delays to surface
+            dz_as = surface_height - z_src
+            dz_ra = z_rcr - surface_height
 
-        # tau limit all arrays
-        tau_ras = tau_ras[tau_i]
-        t_rcr_ref = self.tau_img + self.t_a[0]
-        num_samp_shift = np.asarray((tau_ras - t_rcr_ref) / self.dt,
-                                    dtype=np.int64)
+            # compute src and receiver distances
+            m_as = ne.evaluate(ne_strs.m_as(self.src_type))
+            m_ra = ne.evaluate(ne_strs.m_ra(self.src_type))
 
-        dx_as = np.broadcast_to(dx_as, m_as.shape)[tau_i]
-        dx_ra = np.broadcast_to(dx_ra, m_as.shape)[tau_i]
+            # normal derivative projection
+            proj = ne.evaluate(ne_strs.proj(src_type=self.src_type))
 
-        if self.src_type == "3D":
-            dy_as = np.broadcast_to(dy_as, m_as.shape)[tau_i]
-            dy_ra = np.broadcast_to(dy_ra, m_as.shape)[tau_i]
-        else:
-            dy_as = None
-            dy_ra = None
+            # time axis
+            tau_img = self.experiment.tau_img
+            tau_ras = (m_as + m_ra) / self.experiment.c
+            # bound integration by delay time
+            tau_lim = self.experiment.tau_max
+            tau_i = ne.evaluate("tau_ras < tau_lim")
 
-        dz_as = dz_as[tau_i]
-        dz_ra = dz_ra[tau_i]
+            # tau limit all arrays
+            tau_ras = tau_ras[tau_i]
+            t_rcr_ref = self.tau_img + self.t_a[0]
+            num_samp_shift = np.asarray((tau_ras - t_rcr_ref) / self.dt,
+                                        dtype=np.int64)
 
-        m_as = m_as[tau_i]
-        m_ra = m_ra[tau_i]
+            dx_as = np.broadcast_to(dx_as, m_as.shape)[tau_i]
+            dx_ra = np.broadcast_to(dx_ra, m_as.shape)[tau_i]
 
-        proj = proj[tau_i]
+            if self.src_type == "3D":
+                dy_as = np.broadcast_to(dy_as, m_as.shape)[tau_i]
+                dy_ra = np.broadcast_to(dy_ra, m_as.shape)[tau_i]
+            else:
+                dy_as = None
+                dy_ra = None
 
-        specs = {'t_rcr_ref':t_rcr_ref,
-                 'num_samp_shift':num_samp_shift,
-                 'i_scale':i_scale,
-                 'dx_as':dx_as, 'dy_as':dy_as, 'dz_as':dz_as,
-                 'dx_ra':dx_ra, 'dy_ra':dy_ra, 'dz_ra':dz_ra,
-                 'proj':proj, 'm_as':m_as, 'm_ra':m_ra, 'tau_ras':tau_ras}
-        return specs
+            dz_as = dz_as[tau_i]
+            dz_ra = dz_ra[tau_i]
+
+            m_as = m_as[tau_i]
+            m_ra = m_ra[tau_i]
+
+            proj = proj[tau_i]
+
+            specs = {'t_rcr_ref':t_rcr_ref,
+                    'num_samp_shift':num_samp_shift,
+                    'i_scale':i_scale,
+                    'dx_as':dx_as, 'dy_as':dy_as, 'dz_as':dz_as,
+                    'dx_ra':dx_ra, 'dy_ra':dy_ra, 'dz_ra':dz_ra,
+                    'proj':proj, 'm_as':m_as, 'm_ra':m_ra, 'tau_ras':tau_ras}
+            yield specs
 
 
     def ping_surface(self, specs):

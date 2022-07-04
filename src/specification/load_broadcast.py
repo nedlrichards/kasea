@@ -5,8 +5,7 @@ from math import pi
 import sys
 import importlib.util
 
-from src.surfaces import Surface
-from src.specifications import parse_toml
+from src.specification.parse_toml import parse_toml
 
 
 class Broadcast:
@@ -14,10 +13,13 @@ class Broadcast:
     def __init__(self, toml_file):
         """scatter calculation specification load and basic setup"""
         self.toml_file = toml_file
-        toml_dict = load_broadcast(toml_file)
+        toml_dict = parse_toml(toml_file)
         self.est_z_max = toml_dict['surface']['z_max']
 
-        self.src, self.rcr = self._positions(toml_dict)
+        self.z_src = toml_dict['geometry']['zsrc']
+        self.z_rcr = toml_dict['geometry']['zrcr']
+        self.dr = toml_dict['geometry']['dr']
+
         tf = self._tf_specification(toml_dict)
 
         self.c, self.fc, self.fs, self.max_dur = tf[:4]
@@ -30,33 +32,18 @@ class Broadcast:
         self.pulse_FT = np.fft.rfft(self.pulse, self.surf_t_a.size)
 
         # use image arrival to determine end of time axis
-        r_img_2 = np.sum((self.src[:-1] - self.rcr[:-1]) ** 2) \
-                  + (self.src[-1] + self.rcr[-1]) ** 2
+        r_img = np.sqrt(self.dr ** 2 + (self.z_src + self.z_rcr) ** 2)
 
-        self.tau_img = np.sqrt(r_img_2) / self.c
+        self.tau_img = r_img / self.c
         self.tau_max = self.tau_img + self.max_dur
+
+        # specular point is center of theta rotation
+        self.x_img = self.z_src * self.dr / (self.z_src + self.z_rcr)
+        self.theta = toml_dict['surface']['theta'] if 'theta' in toml_dict['surface'] else 0.
 
         # axes and surface specification
         self.dx = self.c / (self.fs * toml_dict['surface']['decimation'])
         self.toml_dict = toml_dict
-
-
-    def _positions(self, toml_dict):
-        """Source and receiver postions"""
-        src = np.zeros(toml_dict['geometry']['num_dim'] + 1)
-        rcr = np.zeros(toml_dict['geometry']['num_dim'] + 1)
-        src[-1] = toml_dict['geometry']['zsrc']
-        rcr[-1] = toml_dict['geometry']['zrcr']
-
-        if 'xsrc' in toml_dict['geometry']: src[0] = toml_dict['geometry']['xsrc']
-        if 'xrcr' in toml_dict['geometry']: rcr[0] = toml_dict['geometry']['xrcr']
-
-        if toml_dict['geometry']['num_dim'] == 2:
-
-            if 'ysrc' in toml_dict['geometry']: src[1] = toml_dict['geometry']['ysrc']
-            if 'yrcr' in toml_dict['geometry']: rcr[1] = toml_dict['geometry']['yrcr']
-
-        return src, rcr
 
 
     def _tf_specification(self, toml_dict):

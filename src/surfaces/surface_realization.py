@@ -19,17 +19,21 @@ class Surface:
         self.dx = 2 * pi / kmax
         self.surface_dict = surface_dict
 
+        self.time_step = surface_dict['time_step']
+        self.num_snaps = surface_dict['num_snaps']
+        self.time = None
+
         # setup x and y axes
         self.xbounds = xbounds
         n_start = xbounds[0] // self.dx
-        Nx = int((xbounds[1] - xbounds[0]) / self.dx + 2)
+        Nx = int((xbounds[1] - xbounds[0]) / self.dx + 1)
         if Nx % 2: Nx += 1
         self.x_a = (np.arange(Nx) + n_start - 1) * self.dx
 
         self.ybounds = ybounds
         if ybounds is not None:
             n_start = ybounds[0] // self.dx
-            Ny = int((ybounds[1] - ybounds[0]) / self.dx + 2)
+            Ny = int((ybounds[1] - ybounds[0]) / self.dx)
             if Ny % 2: Ny += 1
             self.y_a = (np.arange(Ny) + n_start - 1) * self.dx
         else:
@@ -50,6 +54,35 @@ class Surface:
 
         # setup rng
         self.rng = np.random.default_rng(self.seed)
+
+
+    def __call__(self):
+        """generate next surface"""
+
+        if self.time is None:
+            self.realization = self.gen_realization()
+
+        # isospeed delays to surface
+        surface_height = self.surface_synthesis(self.realization,
+                                                time=self.time)
+        surface_dx = self.surface_synthesis(self.realization,
+                                            derivative='x',
+                                            time=self.time)
+        parts = [surface_height, surface_dx]
+
+        if self.y_a is not None:
+            surface_dy = self.surface_synthesis(self.realization,
+                                                derivative='y',
+                                                time=self.time)
+            parts += [surface_dy]
+
+        if self.time_step is not None:
+            if self.time is not None:
+                self.time += self.time_step
+            else:
+                self.time = self.time_step
+
+        return np.array(parts)
 
 
     def _surface_from_dict(self, sd):
@@ -108,7 +141,7 @@ class Surface:
                                                 self.spec_1D)
 
 
-    def realization(self):
+    def gen_realization(self):
         """Generate a realization of the surface spectrum"""
         s_t = self.surface_dict['type']
         if s_t in ['flat', 'sine']:
