@@ -1,23 +1,23 @@
 [t_f]
-c = "1500."
-fc = "2500."
+c = 1500.
+fc = 2500.
 fs = "4625. * 2"
-max_dur = "0.01"
-max_surf_dur = "0.001"
+max_dur = 0.01
+max_surf_dur = 0.001
 pulse = "nuttall"
 
 [geometry]
-xrcr = "200."
-zrcr = "-10."
-zsrc = "-20."
-num_dim = "2"
+zrcr = -10.
+zsrc = -20.
+dr = 200.
+num_dim = 2
 
 [surface]
 type = "sine"
-H = "2."
-L = "40."
-decimation = "10"
-theta = "90."
-z_max = "1."
-dt = "0.1"
-num_snaps = "70"
+H = 2.
+L = 40.
+decimation = 10
+theta = [45., 90.]
+z_max = 1.
+dt = 0.1
+num_snaps = 70

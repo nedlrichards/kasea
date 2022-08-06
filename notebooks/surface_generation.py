@@ -1,26 +1,36 @@
 import numpy as np
 from math import pi
 import matplotlib.pyplot as plt
+from src import XMitt
 from src.surfaces import Surface
 
 plt.ion()
 
-dx = 0.1
-kmax = 2 * np.pi / dx
-xbounds = (0, 100)
-#ybounds = (-50, 50)
-ybounds = None
+toml_file = 'notebooks/sine.toml'
+xmitt = XMitt(toml_file)
 
-surface_dict = {'type':'PM', 'U20':10., 'z_max':1.}
-#surface_dict = {'type':'sine', 'H':1., 'L':40, 'theta':0, 'z_max':1.}
-
-surf = Surface(xbounds, ybounds, kmax, surface_dict)
-realization = surf.realization()
+surf = xmitt.surface
+realization = surf.gen_realization()
 eta = surf.surface_synthesis(realization)
 
-if ybounds is None:
+if xmitt.y_a is None:
     fig, ax = plt.subplots()
     ax.plot(surf.x_a, eta)
 else:
     fig, ax = plt.subplots()
     ax.pcolormesh(surf.x_a, surf.y_a, eta.T, cmap=plt.cm.coolwarm)
+
+x_a = surf.x_a[:, None]
+y_a = surf.y_a[None, :]
+
+theta = np.deg2rad(xmitt.theta)
+
+for th in theta:
+    tau_bounds = np.sqrt(x_a ** 2 + y_a ** 2 + (eta - xmitt.z_src) ** 2) \
+               + np.sqrt((xmitt.dr * np.cos(th) - x_a) ** 2
+                         + (xmitt.dr * np.sin(th) - y_a) ** 2
+                         + (xmitt.z_rcr - eta) ** 2)
+
+    tau_bounds /= xmitt.experiment.c
+    ax.contour(surf.x_a, surf.y_a, (tau_bounds < xmitt.tau_max).T)
+

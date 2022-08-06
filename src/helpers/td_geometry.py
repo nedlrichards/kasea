@@ -2,7 +2,7 @@ import numpy as np
 from math import sqrt, copysign
 from scipy.optimize import newton
 
-def bound_axes(z_src, z_rcr, dr, offset, max_dur, c=1500., to_rotate=False):
+def bound_axes(z_src, z_rcr, dr, offset, max_dur, c=1500., theta=None):
     """return axes that have delay less than max_dur
     """
     tau_img = np.sqrt(dr ** 2 + (z_src + z_rcr) ** 2)
@@ -35,13 +35,19 @@ def bound_axes(z_src, z_rcr, dr, offset, max_dur, c=1500., to_rotate=False):
     x_ymax = newton(lambda x: r2(x, -dr), x_img, tol=eps)
     y_max = newton(lambda y: r1(x_ymax, y), dr)
 
-    x1 = x_start - x_img
-    x2 = x_end - x_img
+    if theta is None:
+        return (x_start, x_end), (-y_max, y_max)
 
-    if not to_rotate:
-        return (x1, x2), (-y_max, y_max)
+    theta = np.deg2rad(np.array(theta, ndmin=1))
 
-    x_lims = (min(x1, -y_max), max(x2, y_max))
-    y_lims = (min(-y_max, x1), max(x2, y_max))
+    R = np.array([[np.cos(theta), -np.sin(theta)],
+                  [np.sin(theta), np.cos(theta)]])
 
-    return x_lims, y_lims
+    points = np.array([[x_start, -y_max], [x_start, y_max],
+                       [x_end, -y_max], [x_end, y_max]])
+
+    rot_bounds = points @ R
+    x_min, y_min =  np.min(rot_bounds, axis=(1, 2))
+    x_max, y_max =  np.max(rot_bounds, axis=(1, 2))
+
+    return (x_min, x_max), (y_min, y_max)

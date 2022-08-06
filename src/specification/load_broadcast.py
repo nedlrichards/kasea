@@ -14,7 +14,6 @@ class Broadcast:
         """scatter calculation specification load and basic setup"""
         self.toml_file = toml_file
         toml_dict = parse_toml(toml_file)
-        self.est_z_max = toml_dict['surface']['z_max']
 
         self.z_src = toml_dict['geometry']['zsrc']
         self.z_rcr = toml_dict['geometry']['zrcr']
@@ -50,7 +49,6 @@ class Broadcast:
         """Setup of position axes and transmitted pulse"""
         c = toml_dict['t_f']['c']
         fc = toml_dict['t_f']['fc']
-        fs = toml_dict['t_f']['fs']
         max_dur = toml_dict['t_f']['max_dur']
 
         if 'max_surf_dur' in toml_dict['t_f']:
@@ -67,7 +65,9 @@ class Broadcast:
         sys.modules['pulse'] = module
         spec.loader.exec_module(module)
 
-        t_a_pulse, pulse = module.pulse(fc, fs)
+        t_a_pulse, pulse = module.pulse(fc)
+        dt = (t_a_pulse[-1] - t_a_pulse[0]) / (t_a_pulse.size - 1)
+        fs = 1 / dt
 
         return c, fc, fs, max_dur, max_surf_dur, t_a_pulse, pulse
 

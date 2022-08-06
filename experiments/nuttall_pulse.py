@@ -4,8 +4,9 @@ from scipy.signal.windows import hanning
 from scipy.signal.windows import blackmanharris, nuttall
 
 
-def pulse(fc, fs):
+def pulse(fc):
     """Q = 1 pulse"""
+    fs = 1.9 * fc  # estimate of Q for pulse
     T = 1 / fc
     num_cycles = 5
     total_time = num_cycles * T

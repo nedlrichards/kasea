@@ -5,35 +5,44 @@ from scipy.interpolate import RectBivariateSpline
 
 from src.surfaces import PM, ldis_deepwater
 from src.surfaces import e_delta, directional_spectrum
+from src import bound_axes
 
 class Surface:
     """"Generation of surface realizations from spectrum"""
 
-
-    def __init__(self, xbounds, ybounds, kmax, surface_dict):
+    def __init__(self, experiment):
         """
         Setup random generator used for realizations
         spectrum is a scalar, 1-D array or 2-D array
         """
-        self.kmax = kmax
-        self.dx = 2 * pi / kmax
-        self.surface_dict = surface_dict
 
-        self.time_step = surface_dict['time_step']
-        self.num_snaps = surface_dict['num_snaps']
-        self.time = None
+        self.dr = experiment.dr
+        self.z_src = experiment.z_src
+        self.z_rcr = experiment.z_rcr
+
+        self.kmax = 2 * pi / experiment.dx
+        self.dx = experiment.dx
+
+        self.surface_dict = experiment.toml_dict['surface']
+
+        self.theta = self.surface_dict['theta']
+        self.num_snaps = self.surface_dict['num_snaps']
+
+        bounds = bound_axes(self.z_src, self.z_rcr, self.dr,
+                            experiment.est_z_max, experiment.max_dur,
+                            c=experiment.c, theta=self.theta)
 
         # setup x and y axes
-        self.xbounds = xbounds
-        n_start = xbounds[0] // self.dx
-        Nx = int((xbounds[1] - xbounds[0]) / self.dx + 1)
+        self.xbounds = bounds[0]
+        n_start = self.xbounds[0] // self.dx
+        Nx = int((self.xbounds[1] - self.xbounds[0]) / self.dx + 1)
         if Nx % 2: Nx += 1
         self.x_a = (np.arange(Nx) + n_start - 1) * self.dx
 
-        self.ybounds = ybounds
-        if ybounds is not None:
-            n_start = ybounds[0] // self.dx
-            Ny = int((ybounds[1] - ybounds[0]) / self.dx)
+        self.ybounds = bounds[1]
+        if self.ybounds is not None:
+            n_start = self.ybounds[0] // self.dx
+            Ny = int((self.ybounds[1] - self.ybounds[0]) / self.dx)
             if Ny % 2: Ny += 1
             self.y_a = (np.arange(Ny) + n_start - 1) * self.dx
         else:
@@ -48,63 +57,26 @@ class Surface:
         self.surface_type = None
         self.omega = None
         self.seed = None
-        self.dt = None
-        self.num_snaps = None
-        self._surface_from_dict(surface_dict)
+        self._surface_from_dict(self.surface_dict)
 
         # setup rng
         self.rng = np.random.default_rng(self.seed)
-
-
-    def __call__(self):
-        """generate next surface"""
-
-        if self.time is None:
-            self.realization = self.gen_realization()
-
-        # isospeed delays to surface
-        surface_height = self.surface_synthesis(self.realization,
-                                                time=self.time)
-        surface_dx = self.surface_synthesis(self.realization,
-                                            derivative='x',
-                                            time=self.time)
-        parts = [surface_height, surface_dx]
-
-        if self.y_a is not None:
-            surface_dy = self.surface_synthesis(self.realization,
-                                                derivative='y',
-                                                time=self.time)
-            parts += [surface_dy]
-
-        if self.time_step is not None:
-            if self.time is not None:
-                self.time += self.time_step
-            else:
-                self.time = self.time_step
-
-        return np.array(parts)
 
 
     def _surface_from_dict(self, sd):
         """deal with flat and sine special cases or generate a spectrum"""
         s_t = sd['type']
         self.surface_type = s_t
-
         self.seed = sd['seed'] if 'seed' in sd else 0
-        self.dt = sd['dt'] if 'dt' in sd else None
-        self.num_snaps = sd['num_snaps'] if 'num_snaps' in sd else 1
-
         theta = sd['theta'] if 'theta' in sd else 0.
         self.theta = theta
 
         if s_t == 'sine':
-            k = np.array(2 * pi / sd['L'], ndmin=1)
+            self.k = np.array(2 * pi / sd['L'], ndmin=1)
             theta = np.deg2rad(theta)
-            self.kx = np.array(k * np.cos(theta), ndmin=1)
-            self.ky = np.array(k * np.sin(theta), ndmin=1)
             self.spec_1D = sd['H'] / np.sqrt(8)
         elif s_t == 'flat':
-            k = 0.
+            self.k = 0.
             self.kx = 0.
             self.spec_1D = 0.
         else:
@@ -118,25 +90,25 @@ class Surface:
 
                 kx = self.kx[:, None]
                 ky = self.ky[None, :]
-                k = ne.evaluate("sqrt(kx ** 2 + ky ** 2)")
+                self.k = ne.evaluate("sqrt(kx ** 2 + ky ** 2)")
                 k_bearing = ne.evaluate("arctan2(ky, kx)")
             else:
-                k = self.kx
+                self.k = self.kx
 
-        self.omega = ldis_deepwater(k)
+        self.omega = ldis_deepwater(self.k)
         if s_t in ['sine', 'flat']:
             return
 
         # spectrum specifications
         if s_t == 'PM':
-            self.spec_1D = PM(k, sd['U20'])
+            self.spec_1D = PM(self.k, sd['U20'])
         else:
             raise(ValueError("spectrum is not implimented"))
 
         if self.y_a is not None:
-            delta = e_delta(k, sd["U20"])
+            delta = e_delta(self.k, sd["U20"])
             self.spec_2D = directional_spectrum(delta,
-                                                k,
+                                                self.k,
                                                 k_bearing,
                                                 self.spec_1D)
 
@@ -185,20 +157,23 @@ class Surface:
                                 dtype=np.float64)
 
         if s_t == 'sine':
+            if time is None:
+                time = 0
+
             if self.y_a is None:
-                phase = self.x_a[:, None] * self.kx[None, :] \
+                phase = self.x_a[:, None] * self.k[None, :] \
                       + self.omega[None, :] * time
             else:
-                phase = self.x_a[:, None, None] * self.kx[None, None, :] \
-                      + self.y_a[None, :, None] * self.ky[None, None, :] \
+                phase = self.x_a[:, None, None] * self.k[None, None, :] \
+                      + self.y_a[None, :, None] * 0. \
                       + self.omega[None, None, :] * time
 
-            spec_1d = self.spec_1d
+            spec_1D = self.spec_1D
             surf = ne.evaluate("spec_1D * exp(1j * phase) * sqrt(2)")
             if derivative == 'x':
-                surf *= 1j * self.kx[..., :]
+                surf *= 1j * self.k[None :]
             elif derivative == 'y':
-                surf *= 1j * self.ky[..., :]
+                surf *= 0.
             surf = surf.sum(axis=-1)
             return np.imag(surf)
 
@@ -207,9 +182,6 @@ class Surface:
             phase = "exp(-1j * omega * time)"
         else:
             phase = "1."
-
-        if realization is None:
-            raise(ValueError("No surface specified"))
 
         # 1-D wave field
         if self.spec_2D is None:
@@ -236,6 +208,3 @@ class Surface:
                                     axes=(1,0))
 
         return surface
-
-
-

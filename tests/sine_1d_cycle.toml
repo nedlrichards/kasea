@@ -7,9 +7,9 @@ max_surf_dur = "0.001"
 pulse = "nuttall"
 
 [geometry]
-xrcr = "200."
 zrcr = "-10."
 zsrc = "-20."
+dr = "200."
 num_dim = "1"
 
 [surface]
@@ -18,5 +18,5 @@ H = "2."
 L = "40."
 decimation = "10"
 z_max = "1."
-dt = "0.1"
+time_step = "0.1"
 num_snaps = "70"
