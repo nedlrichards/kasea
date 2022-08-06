@@ -69,9 +69,6 @@ def e_delta(k, U20):
     ap = 4
     am = 0.13 * u_star / cmin
 
-    #delta = np.tanh(a0
-                    #+ ap * (cphase / cpeak) ** 2.5
-                    #+ am * (cmin / cphase) ** 2.5)
     expr = "tanh(a0 + ap * (cphase / cpeak) ** 2.5" \
                  + "+ am * (cmin / cphase) ** 2.5)"
 
@@ -84,10 +81,7 @@ def ldis_deepwater(k, derivative=False):
     if derivative:
         expr = "g * (1 + 3 * (k / km) ** 2)" \
              + " / (2 * sqrt(g * k * (1 + (k / km) ** 2)))"
-        #dwdk = g * (1 + 3 * (k / km) ** 2) \
-                #/ (2 * np.sqrt(g * k * gc))
     else:
         expr = "sqrt(g * k * (1 + (k / km) ** 2))"
-        #omega = np.sqrt(g * k * gc)
 
     return ne.evaluate(expr)
