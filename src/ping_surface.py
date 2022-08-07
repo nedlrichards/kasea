@@ -4,7 +4,7 @@ from math import pi
 from os.path import join
 import copy
 
-from src import Broadcast, Surface, Config, bound_axes
+from src import Broadcast, load_surface, Config
 from src import ne_strs
 
 
@@ -47,7 +47,7 @@ class XMitt:
         self.theta = surf_dict['theta'] if 'theta' in surf_dict else 0.
         self.time_step = surf_dict['time_step']
 
-        self.surface = Surface(experiment)
+        self.surface = load_surface(experiment)
         self.realization = None
 
         self.x_a = self.surface.x_a

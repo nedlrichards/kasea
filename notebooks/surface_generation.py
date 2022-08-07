@@ -2,11 +2,10 @@ import numpy as np
 from math import pi
 import matplotlib.pyplot as plt
 from src import XMitt
-from src.surfaces import Surface
 
 plt.ion()
 
-toml_file = 'notebooks/sine.toml'
+toml_file = 'notebooks/flat.toml'
 xmitt = XMitt(toml_file)
 
 surf = xmitt.surface
