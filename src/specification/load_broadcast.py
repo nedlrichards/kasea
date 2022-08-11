@@ -38,7 +38,10 @@ class Broadcast:
 
         # specular point is center of theta rotation
         self.x_img = self.z_src * self.dr / (self.z_src + self.z_rcr)
-        self.theta = toml_dict['surface']['theta'] if 'theta' in toml_dict['surface'] else 0.
+        if 'theta' in toml_dict['surface']:
+            self.theta = np.deg2rad(toml_dict['surface']['theta'])
+        else:
+            self.theta = 0.
 
         # axes and surface specification
         self.dx = self.c / (self.fs * toml_dict['surface']['decimation'])

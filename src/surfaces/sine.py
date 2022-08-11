@@ -19,7 +19,6 @@ class Sine(Surface):
         super().__init__(experiment)
 
         self.k = np.array(2 * pi / self.surface_dict['L'], ndmin=1)
-        theta = np.deg2rad(theta)
         self.spec_1D = self.surface_dict['H'] / np.sqrt(8)
 
         self.omega = ldis_deepwater(self.k)

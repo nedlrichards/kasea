@@ -26,13 +26,12 @@ class Surface:
 
         self.surface_dict = experiment.toml_dict['surface']
 
-        self.theta = self.surface_dict['theta']
         self.num_snaps = self.surface_dict['num_snaps']
         self.max_dur = experiment.max_dur
         self.c = experiment.c
 
-
         # wavenumber and spectrum variables set according to surface type
+        self.tau_max = experiment.tau_max
         self.xbounds = None
         self.x_a = None
         self.ybounds = None
@@ -42,10 +41,12 @@ class Surface:
         self.ky = None
         self.spec_1D = None
         self.spec_2D = None
-        theta = self.surface_dict['theta'] if 'theta' in self.surface_dict else 0.
+        self.theta = self.surface_dict['theta']
         self.surface_type = None
         self.omega = None
         self.seed = self.surface_dict['seed'] if 'seed' in self.surface_dict else 0
+
+        self.est_z_max = None  # set by child surface class
 
         # setup rng
         self.rng = np.random.default_rng(self.seed)
@@ -53,6 +54,7 @@ class Surface:
 
     def set_bounds(self, est_z_max):
         """The estimate of z max will be provided by the child class"""
+        self.est_z_max = est_z_max
         bounds = bound_axes(self.z_src, self.z_rcr, self.dr,
                             est_z_max, self.max_dur,
                             c=self.c, theta=self.theta)
@@ -72,6 +74,28 @@ class Surface:
             self.y_a = (np.arange(Ny) + n_start - 1) * self.dx
         else:
             self.y_a = None
+
+        # restrict x and y axis with accurate time bounds
+        if self.y_a is None or (self.theta.size == 1 and np.abs(self.theta[0]) < 1):
+            return
+
+        r_src = np.sqrt(self.x_a[:, None] ** 2 + self.y_a[None, :] ** 2
+                        + (est_z_max - self.z_src) ** 2)
+
+        mask = np.zeros((self.x_a.size, self.y_a.size), dtype=np.bool_)
+
+        for th in self.theta:
+            r_rcr = np.sqrt((self.dr * np.cos(th) - self.x_a[:, None]) ** 2
+                            + (self.dr * np.sin(th) - self.y_a[None, :]) ** 2
+                            + (self.z_rcr - est_z_max) ** 2)
+
+            tau_ras = (r_src + r_rcr) / self.c
+            mask |= tau_ras < self.tau_max
+
+        self.mask = mask
+
+        self.x_a = self.x_a[np.any(mask, axis=1)]
+        self.y_a = self.y_a[np.any(mask, axis=0)]
 
 
     def gen_realization(self):

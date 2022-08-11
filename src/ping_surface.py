@@ -44,7 +44,7 @@ class XMitt:
 
         # setup surface
         surf_dict = self.experiment.toml_dict['surface']
-        self.theta = surf_dict['theta'] if 'theta' in surf_dict else 0.
+        self.theta = surf_dict['theta']
         self.time_step = surf_dict['time_step']
 
         self.surface = load_surface(experiment)
@@ -119,8 +119,7 @@ class XMitt:
         z_rcr = self.z_rcr
 
 
-        for theta in self.theta:
-            deg = np.deg2rad(theta)
+        for deg in self.theta:
             pos_src = -self.x_img * np.array([np.cos(deg), np.sin(deg)])
             pos_rcr = (self.dr - self.x_img) * np.array([np.cos(deg), np.sin(deg)])
 

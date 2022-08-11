@@ -22,7 +22,7 @@ else:
 x_a = surf.x_a[:, None]
 y_a = surf.y_a[None, :]
 
-theta = np.deg2rad(xmitt.theta)
+theta = np.array(xmitt.theta, ndmin=1)
 
 for th in theta:
     tau_bounds = np.sqrt(x_a ** 2 + y_a ** 2 + (eta - xmitt.z_src) ** 2) \

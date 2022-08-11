@@ -38,7 +38,7 @@ def bound_axes(z_src, z_rcr, dr, offset, max_dur, c=1500., theta=None):
     if theta is None:
         return (x_start, x_end), (-y_max, y_max)
 
-    theta = np.deg2rad(np.array(theta, ndmin=1))
+    theta = np.array(theta, ndmin=1)
 
     R = np.array([[np.cos(theta), -np.sin(theta)],
                   [np.sin(theta), np.cos(theta)]])
