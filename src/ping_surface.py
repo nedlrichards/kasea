@@ -4,7 +4,7 @@ from math import pi
 from os.path import join
 import copy
 
-from src import Broadcast, load_surface, Config
+from src import Broadcast, load_surface, Config, SurfMMAP
 from src import ne_strs
 
 
@@ -18,6 +18,7 @@ class XMitt:
             self.cf = Config(save_dir=save_dir)
         else:
             self.cf = Config()
+
         self.save_name = toml_file.split('/')[-1].split('.')[0]
         experiment = Broadcast(toml_file)
         self.num_sample_chunk = int(num_sample_chunk)
@@ -48,7 +49,7 @@ class XMitt:
         self.time_step = surf_dict['time_step']
 
         self.surface = load_surface(experiment)
-        self.realization = None
+        mmap = SurfMMAP(self.surface)
 
         self.x_a = self.surface.x_a
         self.y_a = self.surface.y_a
@@ -62,20 +63,21 @@ class XMitt:
         self.save_i = 0
 
 
-    def one_time(self):
-        """Save scattered pressure allong with toml meta data"""
-        surf = self.surface()
+    def one_time(self, time):
+        """Compute scattered pressure and save with meta data"""
+        self.mmap.synthesize(time)
+
         p_sca = []
         src = []
         rcr = []
-        #tau_i = []
 
+        # 2D surface results by angle
         for spec in self._angle_gen(surf):
             src.append(spec['src'])
             rcr.append(spec['rcr'])
-            #tau_i.append(spec['tau_i'])
             p_sca.append(self.ping_surface(spec))
 
+        # 1D surface results by angle
         surf_1d = surf[:, np.argmin(np.abs(self.x_a)), :]
         surf_1d[-1] = 0.
 
@@ -85,10 +87,9 @@ class XMitt:
         for spec in self._angle_gen(surf_1d):
             p_sca_1d.append(self.ping_surface(spec))
 
-
-        save_size = 300
+        # save pressure time series and downsampled surface
+        save_size = 300  # estimated size of x and y axes
         decimation = np.array(surf[0].shape) // save_size
-        #tau_i = np.array(tau_i)
 
         save_dict = {'t_a':self.t_a, 'src':np.array(src), 'rcr':np.array(rcr),
                       'p_sca':np.array(p_sca), 'p_sca_1d':np.array(p_sca_1d)}
@@ -108,35 +109,36 @@ class XMitt:
         return save_path
 
 
-    def _angle_gen(self, surface):
-        """Compute a surface realization and compute scatter"""
-        surface_height = surface[0]
-        surface_dx = surface[1]
-        if self.y_a is not None:
-            surface_dy = surface[2]
+    def _angle_gen(self):
+        """Generate specifications of a scatter calculation"""
+        surface_dy = surface[2]
 
         z_src = self.z_src
         z_rcr = self.z_rcr
 
-
         for deg in self.theta:
-            pos_src = -self.x_img * np.array([np.cos(deg), np.sin(deg)])
-            pos_rcr = (self.dr - self.x_img) * np.array([np.cos(deg), np.sin(deg)])
+            surf_points = mmap.load_surface(theta=th)
+            x_a = surf_points[..., 0]
+            if self.y_a is not None:
+                y_a = surf_points[..., 1]
+                surface_height = surf_points[..., 2]
 
-            (x_src, y_src) = pos_src
-            (x_rcr, y_rcr) = pos_rcr
+            surface_height = surface[0]
 
-            # 1D distances
-            dx_as = self.x_a - x_src
+            (x_rcr, y_rcr) = self.dr * np.array([np.cos(deg), np.sin(deg)])
+
+            # x distances
+            dx_as = self.x_a
             dx_ra = x_rcr - self.x_a
 
             if self.src_type == '3D':
-                dy_as = (self.y_a - y_src)[None, :]
+                dy_as = self.y_a[None, :]
                 dy_ra = (y_rcr - self.y_a)[None, :]
 
-                # inflate 1D dimensions
+                # inflate x dimensions
                 dx_as = dx_as[:, None]
                 dx_ra = dx_ra[:, None]
+
                 i_scale = self.dx * self.dy
             else:
                 i_scale = self.dx
@@ -155,9 +157,6 @@ class XMitt:
             # time axis
             tau_img = self.experiment.tau_img
             tau_ras = (m_as + m_ra) / self.experiment.c
-            # bound integration by delay time
-            tau_lim = self.experiment.tau_max
-            tau_i = ne.evaluate("tau_ras < tau_lim")
 
             # tau limit all arrays
             tau_ras = tau_ras[tau_i]
@@ -165,31 +164,9 @@ class XMitt:
             num_samp_shift = np.asarray((tau_ras - t_rcr_ref) / self.dt,
                                         dtype=np.int64)
 
-            dx_as = np.broadcast_to(dx_as, m_as.shape)[tau_i]
-            dx_ra = np.broadcast_to(dx_ra, m_as.shape)[tau_i]
-
-            if self.src_type == "3D":
-                dy_as = np.broadcast_to(dy_as, m_as.shape)[tau_i]
-                dy_ra = np.broadcast_to(dy_ra, m_as.shape)[tau_i]
-            else:
-                dy_as = None
-                dy_ra = None
-
-            dz_as = dz_as[tau_i]
-            dz_ra = dz_ra[tau_i]
-
-            m_as = m_as[tau_i]
-            m_ra = m_ra[tau_i]
-
-            proj = proj[tau_i]
-
-            specs = {'t_rcr_ref':t_rcr_ref,
-                    'num_samp_shift':num_samp_shift,
-                    'i_scale':i_scale, 'tau_i':tau_i,
-                    'dx_as':dx_as, 'dy_as':dy_as, 'dz_as':dz_as,
-                    'dx_ra':dx_ra, 'dy_ra':dy_ra, 'dz_ra':dz_ra,
+            specs = {'t_rcr_ref':t_rcr_ref, 'num_samp_shift':num_samp_shift,
                     'proj':proj, 'm_as':m_as, 'm_ra':m_ra, 'tau_ras':tau_ras,
-                    'src':pos_src, 'rcr':pos_rcr}
+                    'i_scale':i_scale, 'src':pos_src, 'rcr':pos_rcr}
             yield specs
 
 

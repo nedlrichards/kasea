@@ -27,9 +27,9 @@ class SurfMMAP:
 
         # setup file to store surfaces
         if surface.y_a is None:
-            self.ndshape = (surface.x_a.size, 3)
+            self.ndshape = (3, surface.x_a.size)
         else:
-            self.ndshape = (surface.x_a.size, surface.y_a.size, 5)
+            self.ndshape = (5, surface.x_a.size, surface.y_a.size)
 
         self.eta_file = path.join(self.tmpdir, 'realization.dat')
 
@@ -47,20 +47,14 @@ class SurfMMAP:
                        shape=self.ndshape)
         surf = self.surface
 
-        if surf.y_a is None:
-            fp[:, 0] = surf.x_a
-            fp[:, 1] = surf.surface_synthesis(realization, time=time, derivative=None)
-            fp[:, 2] = surf.surface_synthesis(realization, time=time,
-                                                     derivative='x')
-        else:
-            fp[:, :, 0] = surf.x_a[:, None]
-            fp[:, :, 1] = surf.y_a[None, :]
-            fp[:, :, 2] = surf.surface_synthesis(realization, time=time,
-                                                 derivative=None)
-            fp[:, :, 3] = surf.surface_synthesis(realization, time=time,
-                                                 derivative='x')
-            fp[:, :, 4] = surf.surface_synthesis(realization, time=time,
-                                                 derivative='y')
+        fp[0] = surf.x_a[:, None]
+        fp[1] = surf.surface_synthesis(realization, time=time, derivative=None)
+        fp[2] = surf.surface_synthesis(realization, time=time, derivative='x')
+
+        if surf.y_a is not None:
+            fp[3] = surf.y_a[None, :]
+            fp[4] = surf.surface_synthesis(realization, time=time, derivative='y')
+
         fp.flush()
 
 
@@ -71,11 +65,11 @@ class SurfMMAP:
         num_vals = fp.size
         num_chunks = int(np.ceil(num_vals / self.chunksize))
 
-        inds = self.ndshape[0] // num_chunks
+        inds = self.ndshape[1] // num_chunks
         start_i = inds * np.arange(num_chunks + 1)
 
         # add ones to position to make up for remainer
-        rem = fp.shape[0] - start_i[-1]
+        rem = fp.shape[1] - start_i[-1]
         start_i[-rem:] += np.arange(rem) + 1
 
         # setup delay bound calculation
@@ -85,14 +79,13 @@ class SurfMMAP:
         c = self.surface.c
         tau_max = self.surface.tau_max
 
-
         vals = []
 
         for i, j in zip(start_i[:-1], start_i[1:]):
-            tester = fp[i: j, :,  :]
-            x_a = tester[:, :, 0]
-            y_a = tester[:, :, 1]
-            eta = tester[:, :, 2]
+            tester = fp[:, i: j, :]
+            x_a = tester[0]
+            eta = tester[1]
+            y_a = tester[3]
 
             r_src = np.sqrt(x_a ** 2 + y_a ** 2 + (eta - z_src) ** 2)
             r_rcr = np.sqrt((dr * np.cos(theta) - x_a) ** 2
@@ -101,8 +94,8 @@ class SurfMMAP:
             tau_bounds = (r_src + r_rcr) / c
 
             is_in = (tau_bounds <= tau_max)
-            vals.append(tester[is_in, :])
-        return np.concatenate(vals)
+            vals.append(tester[:, is_in])
+        return np.concatenate(vals, axis=1)
 
 
     def __del__(self):

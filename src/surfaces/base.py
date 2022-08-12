@@ -24,9 +24,6 @@ class Surface:
         self.kmax = 2 * pi / experiment.dx
         self.dx = experiment.dx
 
-        self.surface_dict = experiment.toml_dict['surface']
-
-        self.num_snaps = self.surface_dict['num_snaps']
         self.max_dur = experiment.max_dur
         self.c = experiment.c
 
@@ -41,10 +38,10 @@ class Surface:
         self.ky = None
         self.spec_1D = None
         self.spec_2D = None
-        self.theta = self.surface_dict['theta']
+        self.theta = experiment.theta
         self.surface_type = None
         self.omega = None
-        self.seed = self.surface_dict['seed'] if 'seed' in self.surface_dict else 0
+        self.seed = experiment.seed
 
         self.est_z_max = None  # set by child surface class
 

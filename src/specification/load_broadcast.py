@@ -43,6 +43,7 @@ class Broadcast:
         else:
             self.theta = 0.
 
+        self.seed = toml_dict['surface']['seed'] if 'seed' in toml_dict['surface'] else 0
         # axes and surface specification
         self.dx = self.c / (self.fs * toml_dict['surface']['decimation'])
         self.toml_dict = toml_dict
