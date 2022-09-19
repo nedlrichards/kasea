@@ -107,34 +107,52 @@ class Realization:
         if not to_shadow:
             return distance_mask
 
-        # sort bearings by source and receiver distance
-        th_src = z_s / d_src
-        th_rcr = z_r / d_rcr
+        # shadow test works on projected geometry
+        proj_d_src = ne.evaluate("sqrt(x_a ** 2 + y_a ** 2")
+        proj_d_rcr = ne.evaluate("sqrt((x_r - x_a) ** 2 + (y_r - y_a) ** 2)")
+
+        # restrict showning domain
         eta = z[distance_mask]
         d_src = d_src[distance_mask]
         d_rcr = d_rcr[distance_mask]
+        proj_d_src = proj_d_src[distance_mask]
+        proj_d_rcr = proj_d_rcr[distance_mask]
+
+        # sort bearings by projected source and receiver distance
+        sort_i_src = np.argsort(proj_d_src, kind='heapsort')
+        sort_i_rcr = np.argsort(proj_d_rcr, kind='heapsort')
+
+        # define same launch angle sign for source and receiver
+        th_src = (eta - z_s) / d_src
+        th_rcr = (eta - z_r) / d_rcr
+
+        if self.y_a is None:
+            src_shad_i = self._shadow_1d(proj_d_src[sort_i_src], th_src[sort_i_src])
+            rcr_shad_i = self._shadow_1d(proj_d_rcr[sort_i_rcr], th_rcr[sort_i_rcr])
+            return (src_shad_i | rcr_shad_i)
 
         th_src = z_s / d_src
         th_rcr = z_r / d_rcr
         th_src = th_src[distance_mask]
         th_rcr = th_rcr[distance_mask]
 
-        if self.y_a is not None:
-            dx = x_r
-            phi_src = ne.evaluate("(x_a * y_r - x_r * y_a) / (dr * sqrt(x_a ** 2 + y_a ** 2))")
-            phi_rcr = ne.evaluate("((x_r - x_a) * y_r - x_r * (y_r - y_a)) / (dr * sqrt((x_a - x_r) ** 2 + (y_a - y_r) ** 2))")
-            phi_src = phi_src[distance_mask]
-            phi_rcr = phi_rcr[distance_mask]
+        phi_src = ne.evaluate("(x_a * y_r - x_r * y_a) / (dr * sqrt(x_a ** 2 + y_a ** 2))")
+        phi_rcr = ne.evaluate("((x_r - x_a) * y_r - x_r * (y_r - y_a)) / (dr * sqrt((x_a - x_r) ** 2 + (y_a - y_r) ** 2))")
+        phi_src = phi_src[distance_mask]
+        phi_rcr = phi_rcr[distance_mask]
 
-        i_src = np.argsort(d_src)
-        i_rcr = np.argsort(d_rcr)
-
+        src_shad_i = self._shadow_2d(proj_d_src[sort_i_src], phi_src[sort_i_src], th_src[sort_i_src])
+        rcr_shad_i = self._shadow_2d(proj_d_rcr[sort_i_rcr], phi_rcr[sort_i_rcr], th_rcr[sort_i_rcr])
+        return (src_shad_i | rcr_shad_i)
 
 
-    def shadow_mask(self, z_src, r_rcr, distance_mask):
+    def _shadow_1d(self, proj_r, theta):
         """Create mask where either source or receiver ray is shadowed"""
+        pass
 
 
+    def _shadow_2d(self, proj_r, phi, theta):
+        """Create mask where either source or receiver ray is shadowed"""
         pass
 
 

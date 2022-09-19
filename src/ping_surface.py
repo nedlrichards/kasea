@@ -4,7 +4,7 @@ from math import pi
 from os.path import join
 import copy
 
-from src import Broadcast, load_surface, Config, SurfMMAP
+from src import Broadcast, load_surface, Config, Realization
 from src import ne_strs
 
 
@@ -49,7 +49,7 @@ class XMitt:
         self.time_step = surf_dict['time_step']
 
         self.surface = load_surface(experiment)
-        mmap = SurfMMAP(self.surface)
+        self.realization = Realization(self.surface)
 
         self.x_a = self.surface.x_a
         self.y_a = self.surface.y_a
