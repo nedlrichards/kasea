@@ -10,8 +10,6 @@ from src import ne_strs
 
 class XMitt:
     """Run common setup and compute scatter time-series"""
-
-
     def __init__(self, toml_file, num_sample_chunk=5e6, save_dir=None):
         """Load xmission parameters and run basic setup"""
         if save_dir is not None:
@@ -20,41 +18,40 @@ class XMitt:
             self.cf = Config()
 
         self.save_name = toml_file.split('/')[-1].split('.')[0]
-        experiment = Broadcast(toml_file)
+        broadcast = Broadcast(toml_file)
         self.num_sample_chunk = int(num_sample_chunk)
 
-        self.fc = experiment.fc
-        self.t_a = experiment.t_a
-        self.f_a = experiment.f_a
+        self.fc = broadcast.fc
+        self.t_a = broadcast.t_a
+        self.f_a = broadcast.f_a
         self.dt = (self.t_a[-1] - self.t_a[0]) / (self.t_a.size - 1)
 
         # seperate time axis for surface sources
-        self.surf_t_a = experiment.surf_t_a
-        self.surf_f_a = experiment.surf_f_a
+        self.surf_t_a = broadcast.surf_t_a
+        self.surf_f_a = broadcast.surf_f_a
 
-        self.z_src = experiment.z_src
-        self.z_rcr = experiment.z_rcr
-        self.dr = experiment.dr
+        self.z_src = broadcast.z_src
+        self.z_rcr = broadcast.z_rcr
+        self.dr = broadcast.dr
 
-        self.dx = experiment.dx
-        self.experiment = experiment
+        self.dx = broadcast.dx
+        self.broadcast = broadcast
 
         self.x_img = self.z_src * self.dr / (self.z_src + self.z_rcr)
-        self.tau_img = experiment.tau_img
-        self.tau_max = experiment.tau_max
+        self.tau_img = broadcast.tau_img
+        self.tau_max = broadcast.tau_max
 
         # setup surface
-        surf_dict = self.experiment.toml_dict['surface']
-        self.theta = surf_dict['theta']
-        self.time_step = surf_dict['time_step']
+        self.theta = self.broadcast.theta
+        self.time_step = self.broadcast.time_step
 
-        self.surface = load_surface(experiment)
+        self.surface = load_surface(broadcast)
         self.realization = Realization(self.surface)
 
         self.x_a = self.surface.x_a
         self.y_a = self.surface.y_a
 
-        if self.experiment.toml_dict['geometry']['num_dim'] == 2:
+        if self.broadcast.toml_dict['geometry']['num_dim'] == 2:
             self.src_type = '2D'
         else:
             self.src_type = '3D'
@@ -101,7 +98,7 @@ class XMitt:
 
         t = self.surface.time
         save_dict['time'] = t
-        save_dict['r_img'] = self.tau_img * self.experiment.c
+        save_dict['r_img'] = self.tau_img * self.broadcast.c
         save_path = join(self.cf.save_dir, self.save_name + f'_{self.save_i:0>3}')
         np.savez(save_path, **save_dict)
         print('saved ' + save_path)
@@ -155,8 +152,8 @@ class XMitt:
             proj = ne.evaluate(ne_strs.proj(src_type=self.src_type))
 
             # time axis
-            tau_img = self.experiment.tau_img
-            tau_ras = (m_as + m_ra) / self.experiment.c
+            tau_img = self.broadcast.tau_img
+            tau_ras = (m_as + m_ra) / self.broadcast.c
 
             # tau limit all arrays
             tau_ras = tau_ras[tau_i]
@@ -178,7 +175,7 @@ class XMitt:
         num_t_a = self.t_a.size
         ka = np.zeros(self.t_a.size + self.surf_t_a.size, dtype=np.float64)
 
-        c = self.experiment.c
+        c = self.broadcast.c
         f_a = self.surf_f_a[:, None]
 
         # sort by tau and then chunck computation
@@ -186,7 +183,7 @@ class XMitt:
         nss = specs['num_samp_shift']
         nss_i = np.argsort(nss)
 
-        pulse = self.experiment.pulse_FT[:, None]
+        pulse = self.broadcast.pulse_FT[:, None]
 
         ka = np.zeros(self.t_a.size + self.surf_t_a.size, dtype=np.float64)
         i_start = 0

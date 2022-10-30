@@ -5,15 +5,13 @@ from math import pi
 import sys
 import importlib.util
 
-from src.specification.parse_toml import parse_toml
-
-
 class Broadcast:
     """Load up a test scenario"""
     def __init__(self, toml_file):
         """scatter calculation specification load and basic setup"""
         self.toml_file = toml_file
-        toml_dict = parse_toml(toml_file)
+        with open(toml_file, "rb") as f:
+            toml_dict = tomli.load(f)
 
         self.z_src = toml_dict['geometry']['zsrc']
         self.z_rcr = toml_dict['geometry']['zrcr']
@@ -43,7 +41,8 @@ class Broadcast:
         else:
             self.theta = 0.
 
-        self.seed = toml_dict['surface']['seed'] if 'seed' in toml_dict['surface'] else 0
+        self.time_step = toml_dict['time_step'] if 'time_step' in toml_dict else None
+        self.seed = toml_dict['surface']['seed'] if 'seed' in toml_dict else 0
         # axes and surface specification
         self.dx = self.c / (self.fs * toml_dict['surface']['decimation'])
         self.toml_dict = toml_dict

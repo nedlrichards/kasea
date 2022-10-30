@@ -73,18 +73,18 @@ class Surface:
             self.y_a = None
 
         # restrict x and y axis with accurate time bounds
-        if self.y_a is None or (self.theta.size == 1 and np.abs(self.theta[0]) < 1):
+        if self.y_a is None or (self.theta.size == 1 and np.abs(self.theta[0]) < 0.01):
             return
 
         r_src = np.sqrt(self.x_a[:, None] ** 2 + self.y_a[None, :] ** 2
-                        + (est_z_max - self.z_src) ** 2)
+                        + (est_z_max + self.z_src) ** 2)
 
         mask = np.zeros((self.x_a.size, self.y_a.size), dtype=np.bool_)
 
         for th in self.theta:
             r_rcr = np.sqrt((self.dr * np.cos(th) - self.x_a[:, None]) ** 2
                             + (self.dr * np.sin(th) - self.y_a[None, :]) ** 2
-                            + (self.z_rcr - est_z_max) ** 2)
+                            + (self.z_rcr + est_z_max) ** 2)
 
             tau_ras = (r_src + r_rcr) / self.c
             mask |= tau_ras < self.tau_max

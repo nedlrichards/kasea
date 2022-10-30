@@ -7,7 +7,9 @@ from src.surfaces import PM, ldis_deepwater
 from src.surfaces import e_delta, directional_spectrum
 from src import bound_axes
 
-from ldis import ldis_deepwater
+from src import ldis_deepwater
+
+from src.surfaces.base import Surface
 
 class Sine(Surface):
     """"Generation of surface realizations from spectrum"""
@@ -18,10 +20,17 @@ class Sine(Surface):
         """
         super().__init__(experiment)
 
-        self.k = np.array(2 * pi / self.surface_dict['L'], ndmin=1)
-        self.spec_1D = self.surface_dict['H'] / np.sqrt(8)
+        self.L = experiment.toml_dict['surface']['L']
+        self.H = experiment.toml_dict['surface']['H']
+
+        self.k = np.array(2 * pi / self.L, ndmin=1)
+        self.spec_1D = self.H / np.sqrt(8)
 
         self.omega = ldis_deepwater(self.k)
+
+        # add buffer equal to sine amplitude
+        self.est_z_max = self.H / 2
+        super().set_bounds(self.est_z_max)
 
 
     def surface_synthesis(self, realization, time=None, derivative=None):
@@ -41,7 +50,9 @@ class Sine(Surface):
         surf = ne.evaluate("spec_1D * exp(1j * phase) * sqrt(2)")
         if derivative == 'x':
             surf *= 1j * self.k[None :]
-        elif derivative == 'y':
+        if derivative == 'xx':
+            surf *= -self.k[None :] ** 2
+        if derivative in ['y', 'xy', 'yy']:
             surf *= 0.
         surf = surf.sum(axis=-1)
         return np.imag(surf)

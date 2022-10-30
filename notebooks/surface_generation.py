@@ -5,7 +5,8 @@ from src import XMitt
 
 plt.ion()
 
-toml_file = 'notebooks/flat.toml'
+#toml_file = 'notebooks/flat.toml'
+toml_file = 'notebooks/sine.toml'
 xmitt = XMitt(toml_file)
 
 surf = xmitt.surface
@@ -22,9 +23,7 @@ else:
 x_a = surf.x_a[:, None]
 y_a = surf.y_a[None, :]
 
-theta = np.array(xmitt.theta, ndmin=1)
-
-for th in theta:
+for th in surf.theta:
     tau_bounds = np.sqrt(x_a ** 2 + y_a ** 2 + (eta - xmitt.z_src) ** 2) \
                + np.sqrt((xmitt.dr * np.cos(th) - x_a) ** 2
                          + (xmitt.dr * np.sin(th) - y_a) ** 2
