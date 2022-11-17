@@ -1,1 +1,1 @@
-from .td_geometry import bound_axes
+from .bound_axes import bound_axes
