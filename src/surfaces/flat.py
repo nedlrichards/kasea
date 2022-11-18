@@ -14,6 +14,7 @@ class Flat(Surface):
         # flat surface does not need a z buffer
         self.est_z_max = 0.
         super().set_bounds(self.est_z_max)
+        self.surface_type = 'flat'
 
 
     def surface_synthesis(self, realization, time=None, derivative=None):

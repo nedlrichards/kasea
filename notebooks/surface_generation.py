@@ -5,30 +5,34 @@ from src import XMitt
 
 plt.ion()
 
-#toml_file = 'notebooks/flat.toml'
-toml_file = 'notebooks/sine.toml'
+toml_file = 'notebooks/flat.toml'
+#toml_file = 'notebooks/sine.toml'
 xmitt = XMitt(toml_file)
 
-surf = xmitt.surface
-realization = surf.gen_realization()
-eta = surf.surface_synthesis(realization)
+broadcast = xmitt.broadcast
+surface = xmitt.surface
+realization = xmitt.realization
 
-if xmitt.y_a is None:
+one_time = np.load(xmitt.one_time(0))
+
+x_a = one_time['x_a']
+y_a = one_time['y_a'] if 'y_a' in one_time else None
+eta = one_time['eta']
+
+if surface.y_a is None:
     fig, ax = plt.subplots()
-    ax.plot(surf.x_a, eta)
+    ax.plot(x_a, eta)
 else:
     fig, ax = plt.subplots()
-    ax.pcolormesh(surf.x_a, surf.y_a, eta.T, cmap=plt.cm.coolwarm)
+    ax.pcolormesh(x_a, y_a, eta.T, cmap=plt.cm.coolwarm)
 
-x_a = surf.x_a[:, None]
-y_a = surf.y_a[None, :]
+for th in surface.theta:
+    tau_bounds = np.sqrt(x_a[:, None] ** 2 + y_a[None, :] ** 2 + (eta - surface.z_src) ** 2) \
+            + np.sqrt((surface.dr * np.cos(th) - x_a[:, None]) ** 2
+                    + (surface.dr * np.sin(th) - y_a[None, :]) ** 2
+                         + (surface.z_rcr - eta) ** 2)
 
-for th in surf.theta:
-    tau_bounds = np.sqrt(x_a ** 2 + y_a ** 2 + (eta - xmitt.z_src) ** 2) \
-               + np.sqrt((xmitt.dr * np.cos(th) - x_a) ** 2
-                         + (xmitt.dr * np.sin(th) - y_a) ** 2
-                         + (xmitt.z_rcr - eta) ** 2)
-
-    tau_bounds /= xmitt.experiment.c
-    ax.contour(surf.x_a, surf.y_a, (tau_bounds < xmitt.tau_max).T)
+    tau_bounds /= broadcast.c
+    X, Y = np.meshgrid(x_a, y_a)
+    ax.contour(X, Y, (tau_bounds < broadcast.tau_max).T)
 

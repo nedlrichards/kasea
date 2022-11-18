@@ -9,7 +9,7 @@ class Realization:
 
     def __init__(self, surface, include_hessian=False, chunksize=1e5):
         """setup surface and save files"""
-        self._surface = surface
+        self.surface = surface
         self.chunksize = chunksize
         self.tmpdir = mkdtemp()
         self.theta = 0.
@@ -27,20 +27,17 @@ class Realization:
             # used for surfaces that don't require a spectrum realization
             self.real_file = None
 
-        self.x_a = surface.x_a
-        self.y_a = surface.y_a
-
         # setup file to store surfaces
         if surface.y_a is None:
             if include_hessian:
-                self.ndshape = (3, self.x_a.size)
+                self.ndshape = (3, surface.x_a.size)
             else:
-                self.ndshape = (2, self.x_a.size)
+                self.ndshape = (2, surface.x_a.size)
         else:
             if include_hessian:
-                self.ndshape = (6, self.x_a.size, self.y_a.size)
+                self.ndshape = (6, surface.x_a.size, surface.y_a.size)
             else:
-                self.ndshape = (3, self.x_a.size, self.y_a.size)
+                self.ndshape = (3, surface.x_a.size, surface.y_a.size)
 
         self.include_hessian = include_hessian
 
@@ -63,7 +60,7 @@ class Realization:
 
         fp = np.memmap(self.eta_file, dtype='float64', mode='w+',
                        shape=self.ndshape)
-        surf = self._surface
+        surf = self.surface
 
         fp[0] = surf.surface_synthesis(realization, time=time, derivative=None)
         fp[1] = surf.surface_synthesis(realization, time=time, derivative='x')

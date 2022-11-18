@@ -11,14 +11,14 @@ def integral_mask(surface_realization, theta, broadcast, to_shadow=False):
     d_max = broadcast.tau_max * broadcast.c
 
     z = np.array(surface_realization()[0])
-    if surface_realization.y_a is None:
-        x_a = surface_realization.x_a
+    if surface_realization.surface.y_a is None:
+        x_a = surface_realization.surface.x_a
         y_a = 0
         x_r = dr
         y_r = 0
     else:
-        x_a = surface_realization.x_a[:, None]
-        y_a = surface_realization.y_a[None, :]
+        x_a = surface_realization.surface.x_a[:, None]
+        y_a = surface_realization.surface.y_a[None, :]
         x_r = dr * np.cos(theta)
         y_r = dr * np.sin(theta)
 

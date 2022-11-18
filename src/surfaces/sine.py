@@ -27,6 +27,7 @@ class Sine(Surface):
         self.spec_1D = self.H / np.sqrt(8)
 
         self.omega = ldis_deepwater(self.k)
+        self.surface_type = 'sine'
 
         # add buffer equal to sine amplitude
         self.est_z_max = self.H / 2

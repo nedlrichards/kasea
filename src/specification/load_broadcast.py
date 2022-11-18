@@ -24,6 +24,7 @@ class Broadcast:
 
         tf = self._tf_axes(toml_dict)
         self.t_a, self.f_a = tf[:2]
+        self.dt = (self.t_a[-1] - self.t_a[0]) / (self.t_a.size - 1)
         self.surf_t_a, self.surf_f_a = tf[2:]
 
         self.pulse_FT = np.fft.rfft(self.pulse, self.surf_t_a.size)
@@ -41,7 +42,7 @@ class Broadcast:
         else:
             self.theta = 0.
 
-        self.time_step = toml_dict['time_step'] if 'time_step' in toml_dict else None
+        self.time_step = toml_dict['surface']['time_step'] if 'time_step' in toml_dict['surface'] else None
         self.seed = toml_dict['surface']['seed'] if 'seed' in toml_dict else 0
         # axes and surface specification
         self.dx = self.c / (self.fs * toml_dict['surface']['decimation'])
