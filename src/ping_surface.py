@@ -28,6 +28,8 @@ class XMitt:
         else:
             self.cf = Config()
 
+        self.num_sample_chunk = int(num_sample_chunk)
+
         self.broadcast = Broadcast(toml_file)
         self.surface = load_surface(self.broadcast)
         self.realization = Realization(self.surface)
@@ -35,38 +37,38 @@ class XMitt:
                        + f"_{self.surface.seed}"
 
 
-    def one_time(self, time_step, surf_decimation=300):
+    def one_time(self, time_step_num, surf_decimation=300):
         """Compute scattered pressure and save with meta data"""
-        time = time_step * self.broadcast.time_step
+        time = time_step_num * self.broadcast.time_step
         self.realization.synthesize(time)
         eta = self.realization()
 
-        p_sca = []
+        save_dict = {'t_a':self.broadcast.t_a, 'time':time}
+
         rcr = []
 
         # 2D surface results by angle
-        specs = [spec for spec in self._angle_gen(eta)]
-        rcr = [spec['rcr'] for spec in specs]
+        if any(x in self.broadcast.solutions for x in ['2D', 'all']):
+            spec_2D_KA = [spec for spec in self._2d_KA_byangle(eta)]
+            p_sca_2D = np.array([self.ping_surface(spec) for spec in spec_2D_KA])
+            save_dict['p_sca_2D'] = p_sca_2D
 
         # save pressure time series and downsampled surface
         decimation = np.array(eta[0].shape) // surf_decimation
 
-        save_dict = {'t_a':self.broadcast.t_a, 'rcr':np.array(rcr)}
-                #'p_sca':np.array(p_sca), 'p_sca_1d':np.array(p_sca_1d)}
 
         save_dict['eta'] = eta[0, ::decimation[0], ::decimation[1]]
         save_dict['x_a'] = self.surface.x_a[::decimation[0]]
         save_dict['y_a'] = self.surface.y_a[::decimation[1]]
-
-        save_dict['time'] = time
         save_dict['r_img'] = self.broadcast.tau_img * self.broadcast.c
-        save_path = join(self.cf.save_dir, self.save_name + f'_{time_step:03}.npz')
+
+        save_path = join(self.cf.save_dir, self.save_name + f'_{time_step_num:03}.npz')
         np.savez(save_path, **save_dict)
         print('saved ' + save_path)
         return save_path
 
 
-    def _angle_gen(self, eta):
+    def _2d_KA_byangle(self, eta):
         """Generate specifications of a scatter calculation"""
         z_src = self.broadcast.z_src
         z_rcr = self.broadcast.z_rcr
@@ -141,21 +143,19 @@ class XMitt:
     def ping_surface(self, specs):
         """perform ka calculation over a single chunk"""
         # specification of ka integrand
-
-        num_t_a = self.t_a.size
-        ka = np.zeros(self.t_a.size + self.surf_t_a.size, dtype=np.float64)
-
+        t_a = self.broadcast.t_a
+        f_a = self.broadcast.surf_f_a[:, None]
         c = self.broadcast.c
-        f_a = self.surf_f_a[:, None]
+
+        num_t_a = t_a.size
+        ka = np.zeros(num_t_a + self.broadcast.surf_t_a.size, dtype=np.float64)
 
         # sort by tau and then chunck computation
-
         nss = specs['num_samp_shift']
         nss_i = np.argsort(nss)
 
         pulse = self.broadcast.pulse_FT[:, None]
 
-        ka = np.zeros(self.t_a.size + self.surf_t_a.size, dtype=np.float64)
         i_start = 0
         i_next = self._next_ind(nss, nss_i, i_start)
 
@@ -166,7 +166,7 @@ class XMitt:
             proj = specs['proj'][chunk][None, :]
             tau_ras = specs['tau_ras'][chunk][None, :]
             n_vals = nss[chunk]
-            D_tau = specs['num_samp_shift'][chunk][None, :] * self.dt
+            D_tau = specs['num_samp_shift'][chunk][None, :] * self.broadcast.dt
             tau_shift = specs['t_rcr_ref'] + D_tau
             m_as = specs['m_as'][chunk][None, :]
             m_ra = specs['m_ra'][chunk][None, :]
@@ -191,7 +191,7 @@ class XMitt:
             i_next = self._next_ind(nss, nss_i, i_start)
 
         ka *= specs['i_scale']
-        ka = ka[:self.t_a.size]
+        ka = ka[:num_t_a]
         return ka
 
 

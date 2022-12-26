@@ -44,6 +44,7 @@ class Broadcast:
 
         self.time_step = toml_dict['surface']['time_step'] if 'time_step' in toml_dict['surface'] else None
         self.seed = toml_dict['surface']['seed'] if 'seed' in toml_dict else 0
+        self.solutions = toml_dict['geometry']['solutions'] if 'solutions' in toml_dict['geometry'] else []
         # axes and surface specification
         self.dx = self.c / (self.fs * toml_dict['surface']['decimation'])
         self.toml_dict = toml_dict

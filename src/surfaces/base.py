@@ -64,16 +64,13 @@ class Surface:
         self.x_a = (np.arange(Nx) + n_start - 1) * self.dx
 
         self.ybounds = bounds[1]
-        if self.ybounds is not None:
-            n_start = self.ybounds[0] // self.dx
-            Ny = int((self.ybounds[1] - self.ybounds[0]) / self.dx)
-            if Ny % 2: Ny += 1
-            self.y_a = (np.arange(Ny) + n_start - 1) * self.dx
-        else:
-            self.y_a = None
+        n_start = self.ybounds[0] // self.dx
+        Ny = int((self.ybounds[1] - self.ybounds[0]) / self.dx)
+        if Ny % 2: Ny += 1
+        self.y_a = (np.arange(Ny) + n_start - 1) * self.dx
 
         # restrict x and y axis with accurate time bounds
-        if self.y_a is None or (self.theta.size == 1 and np.abs(self.theta[0]) < 0.01):
+        if self.theta.size == 1 and np.abs(self.theta[0]) < 0.01:
             return
 
         r_src = np.sqrt(self.x_a[:, None] ** 2 + self.y_a[None, :] ** 2
