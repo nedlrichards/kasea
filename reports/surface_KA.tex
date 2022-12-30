@@ -1,0 +1,36 @@
+\documentclass[preprint,NumberedRefs]{JASA}
+\usepackage{multirow}
+\usepackage{booktabs}
+
+\begin{document}
+\title[Kirchhoff surface scatter]{Kirchhoff approximation for 2D surface scatter}
+\author{Edward L. Richards}
+\email{edwardlrichards@gmail.com}
+\affiliation{Ocean Sciences, University of California Santa Cruz, Santa Cruz, California 95064, USA}
+
+\preprint{E. L. Richards, JASA}	%if you want this message to appear in upper right corner of title page
+
+\date{\today}
+
+\begin{abstract}
+    What happens with 2D surfaces?
+\end{abstract}
+
+\maketitle
+
+\section{\label{sec:methods} Methods}
+The Kirchhoff approximation is
+\begin{equation}
+    p_{sca}(q) = 2 \int_S \frac{\partial}{\partial n} G(r_p) G(r_q) d a.
+\end{equation}
+where $p$ and $q$ are two points inside the medium, and $r_q$ is the range from point $q$ to point $a$.
+\begin{equation}
+    p_{sca}(q) = 2 \int_D \frac{r_p \cdot n}{|r_p|} \frac{exp\left[-i k (r_p + r_q)\right]} {r_p r_q} d a.
+\end{equation}
+where the region $D$ is defined as $r_p + r_q < r_{lim}$.
+
+
+
+
+
+\end{document}

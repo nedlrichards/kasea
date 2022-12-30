@@ -1,5 +1,5 @@
 import numpy as np
-from src.surfaces.base import Surface
+from kasea.surfaces.base import Surface
 
 
 class Flat(Surface):

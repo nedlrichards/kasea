@@ -1,6 +1,4 @@
 import numpy as np
-from scipy.signal.windows import hanning
-
 from scipy.signal.windows import blackmanharris, nuttall
 
 

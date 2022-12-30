@@ -1,15 +1,18 @@
 [t_f]
-c = "1500."
-fc = "2500."
-fs = "4625. * 2"
-max_dur = "0.01"
+c = 1500.0
+fc = 2500.0
+max_dur = 0.02
+pulse = "nuttall"
 
 [geometry]
-xrcr = "200."
-zrcr = "-10."
-zsrc = "-20."
+zrcr = -10.0
+zsrc = -20.0
+dr = 200.0
 
 [surface]
 type = "flat"
-decimation = "10"
-z_max = "1."
+decimation = 10
+theta = [0, 45.0]
+z_max = 1.0
+time_step = 0.1
+num_snaps = 70
