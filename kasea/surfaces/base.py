@@ -1,7 +1,6 @@
 import numpy as np
 import numexpr as ne
 from math import pi
-from scipy.interpolate import RectBivariateSpline
 
 from kasea.surfaces import PM, ldis_deepwater
 from kasea.surfaces import e_delta, directional_spectrum
@@ -20,6 +19,7 @@ class Surface:
         self.dr = experiment.dr
         self.z_src = experiment.z_src
         self.z_rcr = experiment.z_rcr
+        self.x_img = self.z_src * self.dr / (self.z_src + self.z_rcr)
 
         self.kmax = 2 * pi / experiment.dx
         self.dx = experiment.dx

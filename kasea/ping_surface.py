@@ -5,6 +5,8 @@ from os.path import join
 import copy
 
 from kasea import XMission, load_surface, Realization, integral_mask
+from kasea import anisotopic_igral, isotopic_igral, stationary_points
+
 from scipy.interpolate import RegularGridInterpolator
 
 class Ping:
@@ -35,12 +37,18 @@ class Ping:
             x_a = self.surface.x_a
             y_a = self.surface.y_a
 
-            eta_interp = RegularGridInterpolator((x_a, y_a), eta[0])
-            e_dx_interp = RegularGridInterpolator((x_a, y_a), eta[1])
-            e_dy_interp = RegularGridInterpolator((x_a, y_a), eta[2])
-            e_dxdx_interp = RegularGridInterpolator((x_a, y_a), eta[3])
-            e_dxdy_interp = RegularGridInterpolator((x_a, y_a), eta[4])
-            e_dydy_interp = RegularGridInterpolator((x_a, y_a), eta[5])
+            eta_interp = RegularGridInterpolator((x_a, y_a), eta[0],
+                                                 bounds_error=False)
+            e_dx_interp = RegularGridInterpolator((x_a, y_a), eta[1],
+                                                  bounds_error=False)
+            e_dy_interp = RegularGridInterpolator((x_a, y_a), eta[2],
+                                                  bounds_error=False)
+            e_dxdx_interp = RegularGridInterpolator((x_a, y_a), eta[3],
+                                                    bounds_error=False)
+            e_dxdy_interp = RegularGridInterpolator((x_a, y_a), eta[4],
+                                                    bounds_error=False)
+            e_dydy_interp = RegularGridInterpolator((x_a, y_a), eta[5],
+                                                     bounds_error=False)
             iers = [eta_interp, e_dx_interp, e_dy_interp, e_dxdx_interp,
                     e_dxdy_interp, e_dydy_interp]
 
@@ -51,11 +59,20 @@ class Ping:
 
         # 1D isotropic surface results by angle
         if any(x in self.xmission.solutions for x in ['iso', 'all']):
-            spec_KA = [spec for spec in self._iso_KA_byangle(*iers)]
+            for spec in self._iso_KA_byangle(*iers):
+                save_dict['iso_x_a'] = spec['x_a']
+                save_dict['iso_y_a'] = spec['y_a']
 
         # 1D anisotropic surface results by angle
         if any(x in self.xmission.solutions for x in ['aniso', 'all']):
-            spec_KA = [spec for spec in self._aniso_KA_byangle(*iers)]
+            for spec in self._aniso_KA_byangle(*iers):
+                save_dict['aniso_x_a'] = spec['x_a']
+                save_dict['aniso_y_a'] = spec['y_a']
+
+        if any(x in self.xmission.solutions for x in ['eigen', 'all']):
+            for spec in self._eigen_KA_byangle(eta, *iers):
+                save_dict['eigen_x_a'] = spec['x_a']
+                save_dict['eigen_y_a'] = spec['y_a']
 
         # 2D surface results by angle
         if any(x in self.xmission.solutions for x in ['2D', 'all']):
@@ -80,23 +97,35 @@ class Ping:
     def _iso_KA_byangle(self, eta_interp, e_dx_interp, e_dy_interp,
                    e_dxdx_interp, e_dxdy_interp, e_dydy_interp):
         """1D stationary phase scatter approximation with isotropic surface"""
-        z_src = self.xmission.z_src
-        z_rcr = self.xmission.z_rcr
-
         for th in self.xmission.theta:
-            1/0
-            pass
-
+            surface = isotopic_igral(self.surface, th, eta_interp,
+                                     e_dx_interp, e_dy_interp,
+                                     e_dxdx_interp, e_dydy_interp)
+            #TODO: This save is nonsense
+            specs = {'x_a':surface[0], 'y_a':surface[1]}
+            yield specs
 
     def _aniso_KA_byangle(self, eta_interp, e_dx_interp, e_dy_interp,
                    e_dxdx_interp, e_dxdy_interp, e_dydy_interp):
         """1D stationary phase scatter approximation with 1D varing surface"""
-        z_src = self.xmission.z_src
-        z_rcr = self.xmission.z_rcr
-
         for th in self.xmission.theta:
+            surface = anisotopic_igral(self.surface, th, eta_interp,
+                                       e_dx_interp, e_dy_interp,
+                                       e_dxdx_interp, e_dydy_interp)
+            #TODO: This save is nonsense
+            specs = {'x_a':surface[0], 'y_a':surface[1]}
+            yield specs
+
+
+    def _eigen_KA_byangle(self, eta, eta_interp, e_dx_interp, e_dy_interp,
+                         e_dxdx_interp, e_dxdy_interp, e_dydy_interp):
+        """one bounce eigenray approximation of 2D surface scatter"""
+        for th in self.xmission.theta:
+            points = stationary_points(self.surface, th, eta, eta_interp,
+                                       e_dx_interp, e_dy_interp, e_dxdx_interp,
+                                       e_dxdy_interp, e_dydy_interp)
             1/0
-            pass
+            return specs
 
 
     def _2d_KA_byangle(self, eta):

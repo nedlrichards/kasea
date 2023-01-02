@@ -8,6 +8,7 @@ pulse = "nuttall"
 zrcr = -10.0
 zsrc = -20.0
 dr = 200.0
+solutions = ['all']
 
 [surface]
 type = "flat"

@@ -35,8 +35,6 @@ class XMission:
         self.tau_img = r_img / self.c
         self.tau_max = self.tau_img + self.max_dur
 
-        # specular point is center of theta rotation
-        self.x_img = self.z_src * self.dr / (self.z_src + self.z_rcr)
         if 'theta' in toml_dict['surface']:
             self.theta = np.deg2rad(toml_dict['surface']['theta'])
         else:
