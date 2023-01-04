@@ -23,7 +23,7 @@ def anisotopic_igral(surface, theta, eta_interp, e_dx_interp, e_dy_interp,
     r_d2y = lambda x, y: (x ** 2 + z_src ** 2) / np.sqrt(x ** 2 + y ** 2 + z_src ** 2) ** 3 \
                         + ((x - x_r) ** 2 + z_rcr ** 2) / np.sqrt((x - x_r) ** 2 + (y - y_r) ** 2 + z_rcr ** 2) ** 3
 
-    # interation of NR minimization
+    # interation of NR minimization, modified to deal with finite axes
     y_0 = np.full_like(x_a, y_guess)
     y_min = np.full_like(x_a, y_a[0])
     y_max = np.full_like(x_a, y_a[-1])
@@ -131,4 +131,6 @@ def stationary_points(surface, theta, eta, eta_interp, e_dx_interp, e_dy_interp,
 
     stationary_points = np.concatenate(stationary_points) * surface.dx \
                       + np.array([surface.x_a[0], surface.y_a[0]], ndmin=2)
+
+
     return stationary_points
