@@ -3,13 +3,13 @@ import numexpr as ne
 from math import pi
 from scipy.interpolate import RectBivariateSpline
 
-from src.surfaces import PM, ldis_deepwater
-from src.surfaces import e_delta, directional_spectrum
-from src import bound_axes
+from kasea.surfaces import PM, ldis_deepwater
+from kasea.surfaces import e_delta, directional_spectrum
+from kasea import bound_axes
 
-from src import ldis_deepwater
+from kasea import ldis_deepwater
 
-from src.surfaces.base import Surface
+from kasea.surfaces.base import Surface
 
 class Sine(Surface):
     """"Generation of surface realizations from spectrum"""

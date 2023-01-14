@@ -14,7 +14,7 @@ Kirchhoff approximation calculation
 With a pressure release surface, Green's theorem for reduces the dimenension of
 the Helmholtz equation from 3 to 2 dimensions and is expressed
 
-.. math:: P_{sca}(r) = 2 \int_S \frac{\partial}{\partial n} G_s(a) \, G_r(a) \, da,
+.. math:: \Phi_{sca}(r) = 2 \int_S \frac{\partial}{\partial n} G_s(a) \, G_r(a) \, da,
 
 where :math:`G_s(a)` indicates the Green's function for a source at point
 :math:`s` to point :math:`a`. Point :math:`a` denotes a position on the pressure
@@ -27,12 +27,48 @@ the Greens function is defined
 
 With these definitions, the scattered pressure is formulated
 
-.. math:: P_{sca}(r) = \frac{-i k}{8 \pi^2} \iint^\infty_{-\infty}
+.. math:: \Phi_{sca}(r) = \frac{-i k}{8 \pi^2} \iint^\infty_{-\infty}
     \frac{n \cdot (a - s)}{|a-s|}
    \frac{\exp\left[-ik (|a-s| + |r-a|)\right]}{|a-s| |r-a|}
    \, dx \, dy,
 
 where the surface integral is performed along the :math:`z=0` plane.
+
+Stationary phase approximation
+------------------------------
+The scatter integral can be evaluated with using the stationary phase
+approximation, which is equvivalent to the high frequency asimptotics of ray
+theory. The scatter integral is written in stationary phase form as
+
+.. math:: \Phi_{sca}(r) = -i k \iint^\infty_{-\infty}
+    A(\mathbf{x}) \exp\left[-ik \, p(\mathbf{x}) \right] \, dx \, dy,
+with all the real and spatially dependent terms are collected into the slowly varingy
+amplitude function :math:`A(\mathbf{x})`. The stationary phase approximation gives the
+solution as
+
+.. math:: \Phi_{sca}(r) \approx -2 i \pi \sum_{x_0}
+          | \textrm{H}(\mathbf{x}_0) | ^{-1/2}
+          \exp\left[-ik\,  p(\mathbf{x}_0) + i \pi \, \textrm{sgn}(\textrm{H}(\mathbf{x}_0))) / 4\right]
+          A(x_0)
+where :math:`\textbf{x}_0` are stationary points of the function
+:math:`s(\textbf{x})`.
+
+The stationary phase can also be aplied to only one dimension of the KA
+integral, leading to an integral that includes finite frequency effects in one
+dimension. The stationary phase approximation assumes negligable scatter from
+one of the two surface directions. This out of plane direction can be either
+perpendicular to a straight line between the source and receiver, or
+pre-determined based on anisotropy of the surface wave spectrum.
+
+
+.. math:: \Phi_{sca}(r) = \exp[-i \pi / 4] \sqrt{\frac{2 \pi}{k | f''(x) | }}
+    \int^\infty_{-\infty}
+    \frac{n \cdot (a - s)}{|a-s|}
+   \frac{\exp\left[-ik (|a-s| + |r-a|)\right]}{|a-s| |r-a|}
+   \, dx
+
+asd
+
 
 Kirchhoff approximation in time domain
 --------------------------------------
@@ -56,21 +92,16 @@ can be performed analytically,
 where :math:`\tau=(|a-s| + |r-a|) c^{-1}` and :math:`w'(t)` denotes a
 derivative of :math:`w` with respect to time.
 
+
 There is an equivalence in the time domain formulation of the KA between the
 extent of spatial integration and the delay :math:`\tau` that appears in the
 integral. If we assume that all scatter from the surface appears before a
 maximum delay, :math:`\tau_{max}`, the integral can be spatially bounded to only
 include delays before this delay. This spatially bounded integral is written
 
-.. math:: P_{sca}(r) = \frac{-i k}{8 \pi^2} \iint_D
+.. math:: P_{sca}(r) = -\frac{i k}{8 \pi^2} \iint_D
     \frac{n \cdot (a - s)}{|a-s|}
    \frac{\exp\left[-ik (|a-s| + |r-a|)\right]}{|a-s| |r-a|}
    \, dx \, dy,
 
-where :math:`D` is all positions where :math:`|a-s| + |r-a| < c\,  \tau_{max}`.
-
-Syncing data to S3
-^^^^^^^^^^^^^^^^^^
-
-* `make sync_data_to_s3` will use `aws s3 sync` to recursively sync files in `data/` up to `s3://[OPTIONAL] your-bucket-for-syncing-data (do not include 's3://')/data/`.
-* `make sync_data_from_s3` will use `aws s3 sync` to recursively sync files from `s3://[OPTIONAL] your-bucket-for-syncing-data (do not include 's3://')/data/` to `data/`.
+where :math:`D` is all positions where :math:`|a-s| + |r-a| < c^{-1}\,  \tau_{max}`.

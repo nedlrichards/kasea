@@ -132,5 +132,13 @@ def stationary_points(surface, theta, eta, eta_interp, e_dx_interp, e_dy_interp,
     stationary_points = np.concatenate(stationary_points) * surface.dx \
                       + np.array([surface.x_a[0], surface.y_a[0]], ndmin=2)
 
+    eta_stationary = np.concatenate([stationary_points,
+                                     eta_interp(stationary_points)[:, None],
+                                     e_dx_interp(stationary_points)[:, None],
+                                     e_dy_interp(stationary_points)[:, None],
+                                     e_dxdx_interp(stationary_points)[:, None],
+                                     e_dxdy_interp(stationary_points)[:, None],
+                                     e_dydy_interp(stationary_points)[:, None]],
+                                     axis=1)
 
-    return stationary_points
+    return eta_stationary

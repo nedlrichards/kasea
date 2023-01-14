@@ -7,7 +7,7 @@ from os import path
 class Realization:
     """Class to create and manipulate surfaces on disk"""
 
-    def __init__(self, surface, include_hessian=False, chunksize=1e5):
+    def __init__(self, surface, chunksize=1e5):
         """setup surface and save files"""
         self.surface = surface
         self.chunksize = chunksize
@@ -19,21 +19,17 @@ class Realization:
 
         if realization is not None:
             self.real_file = path.join(self.tmpdir, 'realization.dat')
-            real_mmap = np.memmap(self.real_file, dtype='float64',
-                                mode='w+', shape=realization.shape)
-            real_mmap = realization
+            self.real_shape = realization.shape
+            real_mmap = np.memmap(self.real_file, dtype='complex128',
+                                mode='w+', shape=self.real_shape)
+            real_mmap[:] = realization[:]
             real_mmap.flush()
         else:
             # used for surfaces that don't require a spectrum realization
             self.real_file = None
 
         # setup file to store surfaces
-        if include_hessian:
-            self.ndshape = (6, surface.x_a.size, surface.y_a.size)
-        else:
-            self.ndshape = (3, surface.x_a.size, surface.y_a.size)
-
-        self.include_hessian = include_hessian
+        self.ndshape = (6, surface.x_a.size, surface.y_a.size)
 
         self.eta_file = path.join(self.tmpdir, 'realization.dat')
 
@@ -47,7 +43,8 @@ class Realization:
     def synthesize(self, time):
         """Generate realization of surface"""
         if self.real_file is not None:
-            real_mmap = np.memmap(self.real_file, dtype='float64', mode='r')
+            real_mmap = np.memmap(self.real_file, dtype='complex128', mode='r',
+                                  shape=self.real_shape)
             realization = np.array(real_mmap)
         else:
             realization = None
@@ -58,13 +55,10 @@ class Realization:
 
         fp[0] = surf.surface_synthesis(realization, time=time, derivative=None)
         fp[1] = surf.surface_synthesis(realization, time=time, derivative='x')
-
         fp[2] = surf.surface_synthesis(realization, time=time, derivative='y')
-
-        if self.include_hessian:
-            fp[3] = surf.surface_synthesis(realization, time=time, derivative='xx')
-            fp[4] = surf.surface_synthesis(realization, time=time, derivative='xy')
-            fp[5] = surf.surface_synthesis(realization, time=time, derivative='yy')
+        fp[3] = surf.surface_synthesis(realization, time=time, derivative='xx')
+        fp[4] = surf.surface_synthesis(realization, time=time, derivative='xy')
+        fp[5] = surf.surface_synthesis(realization, time=time, derivative='yy')
 
         fp.flush()
 

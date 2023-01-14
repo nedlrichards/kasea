@@ -2,8 +2,6 @@ import numpy as np
 import numexpr as ne
 from math import pi
 
-from kasea.surfaces import PM, ldis_deepwater
-from kasea.surfaces import e_delta, directional_spectrum
 from kasea import bound_axes
 
 

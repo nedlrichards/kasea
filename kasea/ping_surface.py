@@ -17,9 +17,7 @@ class Ping:
 
         self.xmission = XMission(toml_file)
         self.surface = load_surface(self.xmission)
-        include_hessian = False if self.xmission.solutions == ['2D'] else True
-        self.realization = Realization(self.surface,
-                                       include_hessian=include_hessian)
+        self.realization = Realization(self.surface)
 
         self.save_name = self.surface.surface_type \
                        + f"_{self.surface.seed}"
@@ -33,29 +31,33 @@ class Ping:
         eta = self.realization()
 
         # interpolators and higher derivatives required for stationary phase
-        if eta.shape[0] == 6:
-            x_a = self.surface.x_a
-            y_a = self.surface.y_a
+        x_a = self.surface.x_a
+        y_a = self.surface.y_a
 
-            eta_interp = RegularGridInterpolator((x_a, y_a), eta[0],
-                                                 bounds_error=False)
-            e_dx_interp = RegularGridInterpolator((x_a, y_a), eta[1],
-                                                  bounds_error=False)
-            e_dy_interp = RegularGridInterpolator((x_a, y_a), eta[2],
-                                                  bounds_error=False)
-            e_dxdx_interp = RegularGridInterpolator((x_a, y_a), eta[3],
+        eta_interp = RegularGridInterpolator((x_a, y_a), eta[0],
+                                                bounds_error=False)
+        e_dx_interp = RegularGridInterpolator((x_a, y_a), eta[1],
+                                                bounds_error=False)
+        e_dy_interp = RegularGridInterpolator((x_a, y_a), eta[2],
+                                                bounds_error=False)
+        e_dxdx_interp = RegularGridInterpolator((x_a, y_a), eta[3],
+                                                bounds_error=False)
+        e_dxdy_interp = RegularGridInterpolator((x_a, y_a), eta[4],
+                                                bounds_error=False)
+        e_dydy_interp = RegularGridInterpolator((x_a, y_a), eta[5],
                                                     bounds_error=False)
-            e_dxdy_interp = RegularGridInterpolator((x_a, y_a), eta[4],
-                                                    bounds_error=False)
-            e_dydy_interp = RegularGridInterpolator((x_a, y_a), eta[5],
-                                                     bounds_error=False)
-            iers = [eta_interp, e_dx_interp, e_dy_interp, e_dxdx_interp,
-                    e_dxdy_interp, e_dydy_interp]
+        iers = [eta_interp, e_dx_interp, e_dy_interp, e_dxdx_interp,
+                e_dxdy_interp, e_dydy_interp]
 
 
         save_dict = {'t_a':self.xmission.t_a, 'time':time}
 
         rcr = []
+
+        if any(x in self.xmission.solutions for x in ['eigen', 'all']):
+            for spec in self._eigen_KA_byangle(eta, *iers):
+                save_dict['eigen_x_a'] = spec['x_a']
+                save_dict['eigen_y_a'] = spec['y_a']
 
         # 1D isotropic surface results by angle
         if any(x in self.xmission.solutions for x in ['iso', 'all']):
@@ -68,11 +70,6 @@ class Ping:
             for spec in self._aniso_KA_byangle(*iers):
                 save_dict['aniso_x_a'] = spec['x_a']
                 save_dict['aniso_y_a'] = spec['y_a']
-
-        if any(x in self.xmission.solutions for x in ['eigen', 'all']):
-            for spec in self._eigen_KA_byangle(eta, *iers):
-                save_dict['eigen_x_a'] = spec['x_a']
-                save_dict['eigen_y_a'] = spec['y_a']
 
         # 2D surface results by angle
         if any(x in self.xmission.solutions for x in ['2D', 'all']):
@@ -105,6 +102,7 @@ class Ping:
             specs = {'x_a':surface[0], 'y_a':surface[1]}
             yield specs
 
+
     def _aniso_KA_byangle(self, eta_interp, e_dx_interp, e_dy_interp,
                    e_dxdx_interp, e_dxdy_interp, e_dydy_interp):
         """1D stationary phase scatter approximation with 1D varing surface"""
@@ -120,11 +118,34 @@ class Ping:
     def _eigen_KA_byangle(self, eta, eta_interp, e_dx_interp, e_dy_interp,
                          e_dxdx_interp, e_dxdy_interp, e_dydy_interp):
         """one bounce eigenray approximation of 2D surface scatter"""
+        z_src = self.xmission.z_src
+        z_rcr = self.xmission.z_rcr
+
         for th in self.xmission.theta:
+            (x_rcr, y_rcr) = self.xmission.dr * np.array([np.cos(th), np.sin(th)])
             points = stationary_points(self.surface, th, eta, eta_interp,
                                        e_dx_interp, e_dy_interp, e_dxdx_interp,
                                        e_dxdy_interp, e_dydy_interp)
+            dz_s = (points[:, 2] - z_src)
+            dx_r = (x_rcr - points[:, 0])
+            dy_r = (y_rcr - points[:, 1])
+            dz_r = (z_rcr - points[:, 2])
+
+            d_s = np.sqrt(points[:, 0] ** 2 + points[:, 1] ** 2 + dz_s ** 2)
+            d_r = np.sqrt(dx_r ** 2 + dy_r ** 2 + dz_r ** 2)
+
+            dr_dx_s = (points[:, 0] + dz_s * points[:, 3]) / d_s
+            dr_dy_s = (points[:, 1] + dz_s * points[:, 4]) / d_s
+            dr_dx_r = -(dx_r + dz_s * points[:, 3]) / d_r
+            dr_dy_r = -(dy_r + dz_s * points[:, 4]) / d_r
+
+            dr_dxdx_s = ((1 + points[:, 5] * dz_s + points[:, 3] ** 2) - dr_dx_s ** 2) / d_s
+            dr_dxdx_r = ((1 - points[:, 5] * dz_r + points[:, 3] ** 2) - dr_dx_r ** 2) / d_r
+            dr_dxdy_s = (points[:, 6] * dz_s + dr_dx_s * dr_dy_s) / d_s
+            dr_dydy_s = ((1 + points[:, 7] * dz_s + points[:, 4] ** 2) - dr_dy_s ** 2) / d_s
+
             1/0
+
             return specs
 
 

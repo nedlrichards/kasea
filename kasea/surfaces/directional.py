@@ -1,14 +1,13 @@
 import numpy as np
 import numexpr as ne
 from math import pi
-from ldis import ldis_deepwater
+from kasea.surfaces import ldis_deepwater
 
 g = 9.81
 km = 370  # wavenumber at GC wave phase speed minimum
 
 def directional_spectrum(delta, k, k_bearing, omni_spectrum):
     """calculate spreading function from delta"""
-
     spreading = ne.evaluate("(1 + delta * cos(2 * k_bearing)) / (2 * pi)")
 
     # multiply omni-directional spectrum with spreading function
