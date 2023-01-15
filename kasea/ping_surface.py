@@ -55,9 +55,7 @@ class Ping:
         rcr = []
 
         if any(x in self.xmission.solutions for x in ['eigen', 'all']):
-            for spec in self._eigen_KA_byangle(eta, *iers):
-                save_dict['eigen_x_a'] = spec['x_a']
-                save_dict['eigen_y_a'] = spec['y_a']
+            specs = [spec for spec in self._eigen_KA_byangle(eta, *iers)]
 
         # 1D isotropic surface results by angle
         if any(x in self.xmission.solutions for x in ['iso', 'all']):
@@ -91,6 +89,87 @@ class Ping:
         return save_path
 
 
+    def _pos_rcr(self, theta):
+        """Compute position of receiver from theta"""
+        cs = np.array([np.cos(theta), np.sin(theta)])
+        (x_rcr, y_rcr) = self.xmission.dr * cs
+        pos_rcr = np.array([x_rcr, y_rcr, z_rcr])
+        return pos_rcr
+
+
+    def _ray_geometry(self, eta, pos_rcr, surface_mask=False,
+                      compute_derivatives=False):
+        """Compute geometry quanities of KA kernel"""
+        (x_rcr, y_rcr, z_rcr) = pos_rcr
+
+        if surface_mask:
+            z = eta[2][surface_mask]
+            dz_dx = eta[3][surface_mask]
+            dz_dy = eta[4][surface_mask]
+        else:
+            z = eta[2]
+            dz_dx = eta[3]
+            dz_dy = eta[4]
+
+        # source distances
+        dx_s = self.surface.x_a
+        dy_s = self.surface.y_a
+        dz_s = z - self.surface.z_src
+
+        # receiver distances
+        dx_r = self.surface.x_a - x_rcr
+        dy_r = self.surface.y_a - y_rcr
+        dz_r = z - z_rcr
+
+        # compute src and receiver distances
+        m_s = ne.evaluate("sqrt(dx_as ** 2 + dy_as ** 2 + dz_as ** 2)")
+        m_r = ne.evaluate("sqrt(dx_ra ** 2 + dy_ra ** 2 + dz_ra ** 2)")
+
+        # normal derivative projection
+        proj = ne.evaluate("(-dx_s * dz_dx - dy_s * dz_dy + dz_as) / m_s")
+
+        # time delay
+        tau_ras = (m_s + m_r) / self.xmission.c
+
+        specs = {'proj':proj, 'm_as':m_s, 'm_ra':m_r,
+                 'tau_ras':tau_ras, 'rcr':pos_rcr}
+
+        if not compute_derivatives:
+            return specs
+
+        # hessian calculation
+        dz_dxdx = eta[5]
+        dz_dxdy = eta[6]
+        dz_dydy = eta[7]
+
+        dr_dx_s = (dx_s + dz_s * dz_dx) / m_s
+        dr_dy_s = (dy_s + dz_s * dz_dy) / m_s
+        dr_dx_r = (dx_r + dz_s * dz_dx) / m_r
+        dr_dy_r = (dy_r + dz_s * dz_dy) / m_r
+
+        dr_dxdx_s = ((1 + dz_dxdx * dz_s + dz_dx ** 2) - dr_dx_s ** 2) / m_s
+        dr_dxdx_r = ((1 + dz_dxdx * dz_r + dz_dx ** 2) - dr_dx_r ** 2) / m_r
+        dr_dxdy_s = (dz_dxdy * dz_s + dr_dx_s * dr_dy_s) / m_s
+        dr_dxdy_r = (dz_dxdy * dz_r + dr_dx_r * dr_dy_r) / m_r
+        dr_dydy_s = ((1 + dz_dydy * dz_s + dz_dy ** 2) - dr_dy_s ** 2) / m_s
+        dr_dydy_r = ((1 + dz_dydy * dz_r + dz_dy ** 2) - dr_dy_r ** 2) / m_r
+
+        hessian_1 = np.concatenate(((dr_dxdx_s + dr_dxdx_r)[:, None, None],
+                                    (dr_dxdy_s + dr_dxdy_r)[:, None, None]),
+                                    axis=1)
+        hessian_2 = np.concatenate(((dr_dxdy_s + dr_dxdy_r)[:, None, None],
+                                    (dr_dydy_s + dr_dydy_r)[:, None, None]),
+                                    axis=1)
+        hessian = np.concatenate([hessian_1, hessian_2], axis=2)
+
+        specs{'hessian'} = hessian
+        return specs
+
+
+
+
+
+
     def _iso_KA_byangle(self, eta_interp, e_dx_interp, e_dy_interp,
                    e_dxdx_interp, e_dxdy_interp, e_dydy_interp):
         """1D stationary phase scatter approximation with isotropic surface"""
@@ -98,6 +177,8 @@ class Ping:
             surface = isotopic_igral(self.surface, th, eta_interp,
                                      e_dx_interp, e_dy_interp,
                                      e_dxdx_interp, e_dydy_interp)
+
+            1/0
             #TODO: This save is nonsense
             specs = {'x_a':surface[0], 'y_a':surface[1]}
             yield specs
@@ -110,6 +191,7 @@ class Ping:
             surface = anisotopic_igral(self.surface, th, eta_interp,
                                        e_dx_interp, e_dy_interp,
                                        e_dxdx_interp, e_dydy_interp)
+            1/0
             #TODO: This save is nonsense
             specs = {'x_a':surface[0], 'y_a':surface[1]}
             yield specs
@@ -123,28 +205,51 @@ class Ping:
 
         for th in self.xmission.theta:
             (x_rcr, y_rcr) = self.xmission.dr * np.array([np.cos(th), np.sin(th)])
+            pos_rcr = np.array([x_rcr, y_rcr, z_rcr])
             points = stationary_points(self.surface, th, eta, eta_interp,
                                        e_dx_interp, e_dy_interp, e_dxdx_interp,
                                        e_dxdy_interp, e_dydy_interp)
+            dx_s = points[:, 0]
+            dy_s = points[:, 1]
             dz_s = (points[:, 2] - z_src)
-            dx_r = (x_rcr - points[:, 0])
-            dy_r = (y_rcr - points[:, 1])
-            dz_r = (z_rcr - points[:, 2])
+            dx_r = (points[:, 0] - x_rcr)
+            dy_r = (points[:, 1] - y_rcr)
+            dz_r = (points[:, 2] - z_rcr)
 
-            d_s = np.sqrt(points[:, 0] ** 2 + points[:, 1] ** 2 + dz_s ** 2)
+            d_s = np.sqrt(dx_s ** 2 + dy_s ** 2 + dz_s ** 2)
             d_r = np.sqrt(dx_r ** 2 + dy_r ** 2 + dz_r ** 2)
 
-            dr_dx_s = (points[:, 0] + dz_s * points[:, 3]) / d_s
-            dr_dy_s = (points[:, 1] + dz_s * points[:, 4]) / d_s
-            dr_dx_r = -(dx_r + dz_s * points[:, 3]) / d_r
-            dr_dy_r = -(dy_r + dz_s * points[:, 4]) / d_r
+            dr_dx_s = (dx_s + dz_s * points[:, 3]) / d_s
+            dr_dy_s = (dy_s + dz_s * points[:, 4]) / d_s
+            dr_dx_r = (dx_r + dz_s * points[:, 3]) / d_r
+            dr_dy_r = (dy_r + dz_s * points[:, 4]) / d_r
 
             dr_dxdx_s = ((1 + points[:, 5] * dz_s + points[:, 3] ** 2) - dr_dx_s ** 2) / d_s
-            dr_dxdx_r = ((1 - points[:, 5] * dz_r + points[:, 3] ** 2) - dr_dx_r ** 2) / d_r
+            dr_dxdx_r = ((1 + points[:, 5] * dz_r + points[:, 3] ** 2) - dr_dx_r ** 2) / d_r
             dr_dxdy_s = (points[:, 6] * dz_s + dr_dx_s * dr_dy_s) / d_s
+            dr_dxdy_r = (points[:, 6] * dz_r + dr_dx_r * dr_dy_r) / d_r
             dr_dydy_s = ((1 + points[:, 7] * dz_s + points[:, 4] ** 2) - dr_dy_s ** 2) / d_s
+            dr_dydy_r = ((1 + points[:, 7] * dz_r + points[:, 4] ** 2) - dr_dy_r ** 2) / d_r
 
-            1/0
+            # computed quanitites
+            tau = (d_s + d_r) / self.surface.c
+
+            hessian_1 = np.concatenate(((dr_dxdx_s + dr_dxdx_r)[:, None, None],
+                                        (dr_dxdy_s + dr_dxdy_r)[:, None, None]),
+                                        axis=1)
+            hessian_2 = np.concatenate(((dr_dxdy_s + dr_dxdy_r)[:, None, None],
+                                        (dr_dydy_s + dr_dydy_r)[:, None, None]),
+                                        axis=1)
+            hessian = np.concatenate([hessian_1, hessian_2], axis=-1)
+
+            surface_dx = points[:, 3]
+            surface_dy = points[:, 4]
+
+            proj = ne.evaluate("(-dx_s * surface_dx + dz_s - dy_s * surface_dy) / d_s")
+
+            specs = {'x':dx_s, 'y':dy_s, 'z':points[:, 2],
+                     'pos_rcr':pos_rcr, 'proj':proj, 'm_as':d_s, 'm_ra':d_r,
+                     'tau_ras':tau, 'hessian':hessian}
 
             return specs
 
@@ -153,6 +258,8 @@ class Ping:
         """Generate specifications of a scatter calculation"""
         z_src = self.xmission.z_src
         z_rcr = self.xmission.z_rcr
+
+        i_scale = self.surface.dx ** 2
 
         for th in self.xmission.theta:
             igral_mask = integral_mask(self.realization, th, self.xmission)
@@ -213,9 +320,8 @@ class Ping:
             tau_ras = (m_as + m_ra) / self.xmission.c
 
             # tau limit all arrays
+            # TODO: these shouldn't be saved
             t_rcr_ref = tau_img + self.xmission.t_a[0]
-
-            # TODO: this shouldn't be saved
             num_samp_shift = np.asarray((tau_ras - t_rcr_ref) / self.xmission.dt,
                                         dtype=np.int64)
 
