@@ -4,19 +4,17 @@ from skimage import measure
 from shapely.geometry import LineString
 
 
-def anisotopic_igral(surface, theta, eta_interp, e_dx_interp, e_dy_interp,
+def anisotopic_igral(surface, pos_rcr, eta_interp, e_dx_interp, e_dy_interp,
                      e_dxdx_interp, e_dydy_interp):
     """integral after stationary phase along surface wavefront"""
 
     dr = surface.dr
-    x_r = dr * np.cos(theta)
-    y_r = dr * np.sin(theta)
+    x_r, y_r, z_rcr = pos_rcr
     z_src = surface.z_src
-    z_rcr = surface.z_rcr
 
     x_a = surface.x_a
     y_a = surface.y_a
-    y_guess = np.sin(theta) * surface.x_img
+    y_guess = np.mean(y_a)
 
     r_dy = lambda x, y: y / np.sqrt(x ** 2 + y ** 2 + z_src ** 2) \
                         + (y - y_r) / np.sqrt((x - x_r) ** 2 + (y - y_r) ** 2 + z_rcr ** 2)
@@ -55,13 +53,14 @@ def anisotopic_igral(surface, theta, eta_interp, e_dx_interp, e_dy_interp,
     eta_vals = eta_interp(sample_points)
     eta_der = e_dx_interp(sample_points)
     eta_2der = e_dxdx_interp(sample_points)
-    results = np.array([x_a, y_1, eta_vals, eta_der, eta_2der])
+    results = np.array([x_a, y_1, eta_vals, eta_der, np.zeros_like(eta_der),
+                        eta_2der, np.zeros_like(eta_der), np.zeros_like(eta_der)])
 
     return results
 
 
 def isotopic_igral(surface, theta, eta_interp, e_dx_interp, e_dy_interp,
-                   e_dxdx_interp, e_dydy_interp):
+                   e_dxdx_interp, e_dxdy_interp, e_dydy_interp):
     """integral after stationary phase perpedicular to straight line"""
 
     delta_x = surface.x_a[-1] - surface.x_a[0]
@@ -74,17 +73,19 @@ def isotopic_igral(surface, theta, eta_interp, e_dx_interp, e_dy_interp,
     sample_points = np.concatenate([x_th[:, None], y_th[:, None]], axis=1)
 
     eta_vals = eta_interp(sample_points)
-    eta_der = e_dx_interp(sample_points) * np.cos(theta) \
-        - e_dy_interp(sample_points) * np.sin(theta)
-    eta_2der = e_dxdx_interp(sample_points) * np.cos(theta) \
-        - e_dydy_interp(sample_points) * np.sin(theta)
+    eta_dx = e_dx_interp(sample_points)
+    eta_dy = e_dy_interp(sample_points)
+    eta_dxdx = e_dxdx_interp(sample_points)
+    eta_dxdy = e_dxdy_interp(sample_points)
+    eta_dydy = e_dydy_interp(sample_points)
 
-    results = np.array([x_th, y_th, eta_vals, eta_der, eta_2der])
+    results = np.array([x_th, y_th, eta_vals, eta_dx, eta_dy,
+                        eta_dxdx, eta_dxdy, eta_dydy])
 
     return results
 
 
-def stationary_points(surface, theta, eta, eta_interp, e_dx_interp, e_dy_interp,
+def stationary_points(surface, pos_rcr, eta, eta_interp, e_dx_interp, e_dy_interp,
                    e_dxdx_interp, e_dxdy_interp, e_dydy_interp):
     """Stationary points of 2D integral
     eta is a 6xNxM array: z, dz_dx, dz_dy, dz2_dxdx, dz2_dxdy, dz2_dydy"""
@@ -93,9 +94,7 @@ def stationary_points(surface, theta, eta, eta_interp, e_dx_interp, e_dy_interp,
     z_dx = eta[1]
     z_dy = eta[2]
     z_s = surface.z_src
-    x_r = surface.dr * np.cos(theta)
-    y_r = surface.dr * np.sin(theta)
-    z_r = surface.z_rcr
+    x_r, y_r, z_r = pos_rcr
 
     b_x_a = surface.x_a[:, None]
     b_y_a = surface.y_a[None, :]
@@ -132,13 +131,12 @@ def stationary_points(surface, theta, eta, eta_interp, e_dx_interp, e_dy_interp,
     stationary_points = np.concatenate(stationary_points) * surface.dx \
                       + np.array([surface.x_a[0], surface.y_a[0]], ndmin=2)
 
-    eta_stationary = np.concatenate([stationary_points,
-                                     eta_interp(stationary_points)[:, None],
-                                     e_dx_interp(stationary_points)[:, None],
-                                     e_dy_interp(stationary_points)[:, None],
-                                     e_dxdx_interp(stationary_points)[:, None],
-                                     e_dxdy_interp(stationary_points)[:, None],
-                                     e_dydy_interp(stationary_points)[:, None]],
-                                     axis=1)
+    eta_stationary = np.concatenate([stationary_points.T,
+        eta_interp(stationary_points)[:, None],
+        e_dx_interp(stationary_points)[:, None],
+        e_dy_interp(stationary_points)[:, None],
+        e_dxdx_interp(stationary_points)[:, None],
+        e_dxdy_interp(stationary_points)[:, None],
+        e_dydy_interp(stationary_points)[:, None]], axis=0)
 
     return eta_stationary
