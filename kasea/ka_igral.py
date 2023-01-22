@@ -1,230 +1,99 @@
 import numpy as np
 import numexpr as ne
 from math import pi
-from os.path import join
-import copy
+from scipy.interpolate import interp1d
 
-from src import Broadcast, load_surface, Config, Realization, integral_mask
+def spec_igral(xmission, spec, pulse_premult="1"):
+    """ka integration in time domain with interpolation"""
+    pulse = xmission.pulse_FT
+    pulse_FT = ne.evaluate(pulse_premult + " * pulse")
+    pulse_td = np.fft.irfft(pulse_FT)
 
-#string to compute distance from source to surface
-m_as_str = "sqrt(dx_as ** 2  + dy_as ** 2+ dz_as ** 2)"
+    #string to compute product of two greens functions
+    # * -1j * f_a
+    dn_green_product_str = "proj / (4 * pi * c * m_as * m_ra)"
 
-#string to compute distance from source to surface
-m_ra_str = "sqrt(dx_ra ** 2 + dy_ra ** 2 + dz_ra ** 2)"
+    # specification of ka integrand
+    t_a = xmission.t_a
+    dt = (t_a[-1] - t_a[0]) / (t_a.size - 1)
+    f_a = xmission.f_a_pulse[:, None]
+    c = xmission.c
 
-#string to compute n dot grad
-proj_str = "(-dx_as * surface_dx + dz_as - dy_as * surface_dy) / m_as"
+    # sort by tau and then chunck computation
+    t_ref = xmission.tau_img + t_a[0]
+    sort_i = np.argsort(spec['tau_ras'], kind='stable')
+    # TODO: do we need to sort tau_ras?
+    sorted_time = spec['tau_ras'][sort_i]
 
-#string to compute product of two greens functions
-dn_green_product_str = "proj * exp(-2j * pi * f_a * (tau_ras - tau_shift))"
-dn_green_product_str +=  " * -1j * f_a / (4 * pi * c * m_as * m_ra)"
+    nss = np.asarray((spec['tau_ras'] - t_ref) / dt, dtype=np.int64)
+    n_min = nss.min()
+    n_max = nss.max()
 
-class XMitt:
-    """Run common setup and compute scatter time-series"""
-    def __init__(self, toml_file, num_sample_chunk=5e6, save_dir=None):
-        """Load xmission parameters and run basic setup"""
-        if save_dir is not None:
-            self.cf = Config(save_dir=save_dir)
-        else:
-            self.cf = Config()
+    for i in range(n_min, n_max):
+        chunk = (nss == i)
 
-        self.num_sample_chunk = int(num_sample_chunk)
+        # setup KA for one sample delay
+        proj = spec['proj'][chunk][None, :]
+        tau_ras = spec['tau_ras'][chunk][None, :]
+        n_vals = nss[chunk]
+        D_tau = n_vals[None, :] * xmission.dt
+        tau_shift = t_ref + D_tau
+        m_as = spec['m_as'][chunk][None, :]
+        m_ra = spec['m_ra'][chunk][None, :]
 
-        self.broadcast = Broadcast(toml_file)
-        self.surface = load_surface(self.broadcast)
-        self.realization = Realization(self.surface)
-        self.save_name = self.surface.surface_type \
-                       + f"_{self.surface.seed}"
+        ka_FT = ne.evaluate("pulse * " + dn_green_product_str)
+        ka[i: i + surf_ts.size] += surf_ts
 
-
-    def one_time(self, time_step_num, surf_decimation=300):
-        """Compute scattered pressure and save with meta data"""
-        time = time_step_num * self.broadcast.time_step
-        self.realization.synthesize(time)
-        eta = self.realization()
-
-        save_dict = {'t_a':self.broadcast.t_a, 'time':time}
-
-        rcr = []
-
-        # 2D surface results by angle
-        if any(x in self.broadcast.solutions for x in ['2D', 'all']):
-            spec_2D_KA = [spec for spec in self._2d_KA_byangle(eta)]
-            p_sca_2D = np.array([self.ping_surface(spec) for spec in spec_2D_KA])
-            save_dict['p_sca_2D'] = p_sca_2D
-
-        # save pressure time series and downsampled surface
-        decimation = np.array(eta[0].shape) // surf_decimation
+    ka *= spec['i_scale']
+    ka = ka[:num_t_a]
+    return ka
 
 
-        save_dict['eta'] = eta[0, ::decimation[0], ::decimation[1]]
-        save_dict['x_a'] = self.surface.x_a[::decimation[0]]
-        save_dict['y_a'] = self.surface.y_a[::decimation[1]]
-        save_dict['r_img'] = self.broadcast.tau_img * self.broadcast.c
+def spec_igral_FT(xmission, spec):
+    """perform ka calculation over a single chunk"""
+    #string to compute product of two greens functions
+    dn_green_product_str = spec.get("pulse_premult", "1")
+    dn_green_product_str += " * " + "amp_scale"
+    dn_green_product_str += " * proj * exp(-2j * pi * f_a * (tau_ras - tau_shift))"
+    dn_green_product_str += " / (4 * pi * m_as * m_ra)"
 
-        save_path = join(self.cf.save_dir, self.save_name + f'_{time_step_num:03}.npz')
-        np.savez(save_path, **save_dict)
-        print('saved ' + save_path)
-        return save_path
+    # specification of ka integrand
+    t_a = xmission.t_a
+    t_a_pulse = xmission.t_a_pulse
+    dt = (t_a[-1] - t_a[0]) / (t_a.size - 1)
+    f_a = xmission.f_a_pulse[:, None]
+    c = xmission.c
 
+    ka = np.zeros(t_a.size + t_a_pulse.size, dtype=np.float64)
 
-    def _2d_KA_byangle(self, eta):
-        """Generate specifications of a scatter calculation"""
-        z_src = self.broadcast.z_src
-        z_rcr = self.broadcast.z_rcr
+    # sort by tau and then chunck computation
+    t_ref = xmission.tau_img + t_a[0]
+    nss = np.asarray((spec['tau_ras'] - t_ref) / dt, dtype=np.int64)
+    n_min = nss.min()
+    n_max = nss.max()
+    pulse = xmission.pulse_FT[:, None]
 
-        for th in self.broadcast.theta:
-            igral_mask = integral_mask(self.realization, th, self.broadcast)
-            surface_height = eta[0][igral_mask]
-            surface_dx = eta[1][igral_mask]
-            (x_rcr, y_rcr) = self.broadcast.dr * np.array([np.cos(th), np.sin(th)])
-            pos_rcr = np.array([x_rcr, y_rcr, z_rcr])
+    for i in range(n_min, t_a.size - 1):
+        chunk = (nss == i)
+        if not chunk.any():
+            continue
 
-            # x distances
-            dx_as = self.surface.x_a
-            dx_ra = x_rcr - self.surface.x_a
+        # setup KA for one sample delay
+        proj = spec['proj'][chunk][None, :]
+        amp_scale = spec["amp_scale"][chunk][None, :] if 'amp_scale' in spec else 1
+        tau_ras = spec['tau_ras'][chunk][None, :]
+        n_vals = nss[chunk]
+        D_tau = n_vals[None, :] * xmission.dt
+        tau_shift = t_ref + D_tau
+        m_as = spec['m_as'][chunk][None, :]
+        m_ra = spec['m_ra'][chunk][None, :]
 
-            if self.surface.y_a is not None:
-                surface_dy = eta[2][igral_mask]
+        ka_FT = ne.evaluate("pulse * " + dn_green_product_str)
 
-                shp = igral_mask.shape
-                dy_as = np.broadcast_to(self.surface.y_a, shp)
-                dy_ra = np.broadcast_to(y_rcr - self.surface.y_a, shp)
+        surf_FT = np.sum(ka_FT, axis=-1)
+        surf_ts = np.fft.irfft(surf_FT)
+        ka[i: i + surf_ts.size] += surf_ts
 
-                # inflate x dimensions
-                dx_as = np.broadcast_to(dx_as[:, None], shp)
-                dx_ra = np.broadcast_to(dx_ra[:, None], shp)
-
-                # apply surface mask
-                dx_as = dx_as[igral_mask]
-                dx_ra = dx_ra[igral_mask]
-                dy_as = dy_as[igral_mask]
-                dy_ra = dy_ra[igral_mask]
-
-                i_scale = self.surface.dx ** 2
-            else:
-                # values required for ne string
-                dy_as = 0.
-                dy_ra = 0.
-                surface_dy = 0.
-
-                # apply surface mask
-                dx_as = dx_as[igral_mask]
-                dx_ra = dx_as[igral_mask]
-
-                i_scale = self.surface.dx
-
-            # isospeed delays to surface
-            dz_as = surface_height - z_src
-            dz_ra = z_rcr - surface_height
-
-            # compute src and receiver distances
-            m_as = ne.evaluate(m_as_str)
-            m_ra = ne.evaluate(m_ra_str)
-
-            # normal derivative projection
-            proj = ne.evaluate(proj_str)
-
-            # time axis
-            tau_img = self.broadcast.tau_img
-            tau_ras = (m_as + m_ra) / self.broadcast.c
-
-            # tau limit all arrays
-            t_rcr_ref = tau_img + self.broadcast.t_a[0]
-            num_samp_shift = np.asarray((tau_ras - t_rcr_ref) / self.broadcast.dt,
-                                        dtype=np.int64)
-
-            specs = {'t_rcr_ref':t_rcr_ref, 'num_samp_shift':num_samp_shift,
-                    'proj':proj, 'm_as':m_as, 'm_ra':m_ra, 'tau_ras':tau_ras,
-                    'i_scale':i_scale, 'rcr':pos_rcr}
-            yield specs
-
-
-    def ping_surface(self, specs):
-        """perform ka calculation over a single chunk"""
-        # specification of ka integrand
-        t_a = self.broadcast.t_a
-        f_a = self.broadcast.surf_f_a[:, None]
-        c = self.broadcast.c
-
-        num_t_a = t_a.size
-        ka = np.zeros(num_t_a + self.broadcast.surf_t_a.size, dtype=np.float64)
-
-        # sort by tau and then chunck computation
-        nss = specs['num_samp_shift']
-        nss_i = np.argsort(nss)
-
-        pulse = self.broadcast.pulse_FT[:, None]
-
-        i_start = 0
-        i_next = self._next_ind(nss, nss_i, i_start)
-
-        while i_next is not None:
-
-            chunk = nss_i[i_start: i_next[-1]]
-
-            proj = specs['proj'][chunk][None, :]
-            tau_ras = specs['tau_ras'][chunk][None, :]
-            n_vals = nss[chunk]
-            D_tau = specs['num_samp_shift'][chunk][None, :] * self.broadcast.dt
-            tau_shift = specs['t_rcr_ref'] + D_tau
-            m_as = specs['m_as'][chunk][None, :]
-            m_ra = specs['m_ra'][chunk][None, :]
-
-            ka_FT = ne.evaluate("pulse * " + dn_green_product_str)
-
-            sum_inds = i_next - i_start
-            last_i = 0
-
-            for s_i in sum_inds:
-
-                surf_FT = np.sum(ka_FT[:, last_i: s_i], axis=-1)
-                surf_ts = np.fft.irfft(surf_FT)
-
-                ka_i = n_vals[last_i]
-                ka[ka_i: ka_i + surf_ts.size] += surf_ts
-
-                last_i = s_i
-
-
-            i_start = i_next[-1]
-            i_next = self._next_ind(nss, nss_i, i_start)
-
-        ka *= specs['i_scale']
-        ka = ka[:num_t_a]
-        return ka
-
-
-    def _next_ind(self, nss, nss_i, i_start):
-        """manage solution chunck size by index shift"""
-        i_num = nss[nss_i[i_start]]
-
-        j = 1
-        i_max = min(i_start + j * self.num_sample_chunk, nss.size - 1)
-
-        i_test = nss[nss_i[i_max]]
-        while i_test == i_num:
-            if i_max == nss.size - 1:
-                break
-            j += 1
-            i_max = min(i_start + j * self.num_sample_chunk, nss.size - 1)
-            i_test = nss[nss_i[i_max]]
-
-        n_range = nss[nss_i[i_start :i_max]]
-
-        end_off = 0
-        inds = [0]
-        for i in range(i_num + 1, i_test + 1):
-            end_off = np.argmax(n_range[inds[-1]:] == i)
-            inds.append(inds[-1] + end_off)
-
-        # last index case
-        if nss[nss_i[inds[-1]]] == nss[nss_i[-1]]:
-            inds.append(nss.size - 1)
-
-        if len(inds) == 1:
-            return None
-
-        inds = np.array(inds)[1:]
-
-        return i_start + inds
+    ka *= spec['i_scale']
+    ka = ka[:-t_a_pulse.size]
+    return ka

@@ -11,7 +11,7 @@ dr = 200.0
 solutions = ['all']
 
 [surface]
-type = "PM"
+type = "pm_spec"
 U20 = 5
 decimation = 10
 theta = [0, 45.0]

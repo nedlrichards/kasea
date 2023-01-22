@@ -83,11 +83,16 @@ class Surface:
 
             tau_ras = (r_src + r_rcr) / self.c
             mask |= tau_ras < self.tau_max
+        x_mask = np.any(mask, axis=1)
+        y_mask = np.any(mask, axis=0)
 
-        self.mask = mask
+        self.x_a = self.x_a[x_mask]
+        self.y_a = self.y_a[y_mask]
 
-        self.x_a = self.x_a[np.any(mask, axis=1)]
-        self.y_a = self.y_a[np.any(mask, axis=0)]
+        if self.x_a.size % 2:
+            self.x_a = np.concatenate((self.x_a, [self.x_a[-1] + self.dx]))
+        if self.y_a.size % 2:
+            self.y_a = np.concatenate((self.y_a, [self.y_a[-1] + self.dx]))
 
 
     def gen_realization(self):

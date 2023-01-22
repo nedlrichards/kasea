@@ -1,4 +1,4 @@
-import tomli
+import tomlkit
 import numpy as np
 import numexpr as ne
 from math import pi
@@ -11,7 +11,7 @@ class XMission:
         """scatter calculation specification load and basic setup"""
         self.toml_file = toml_file
         with open(toml_file, "rb") as f:
-            toml_dict = tomli.load(f)
+            toml_dict = tomlkit.load(f)
 
         self.z_src = toml_dict['geometry']['zsrc']
         self.z_rcr = toml_dict['geometry']['zrcr']
@@ -20,14 +20,12 @@ class XMission:
         tf = self._tf_specification(toml_dict)
 
         self.c, self.fc, self.fs, self.max_dur = tf[:4]
-        self.max_surf_dur, self.t_a_pulse, self.pulse = tf[4:]
+        self.max_surf_dur, self.t_a_pulse, self.f_a_pulse, self.pulse = tf[4:]
 
-        tf = self._tf_axes(toml_dict)
-        self.t_a, self.f_a = tf[:2]
+        self.t_a, self.f_a = self._tf_axes(toml_dict)
         self.dt = (self.t_a[-1] - self.t_a[0]) / (self.t_a.size - 1)
-        self.surf_t_a, self.surf_f_a = tf[2:]
 
-        self.pulse_FT = np.fft.rfft(self.pulse, self.surf_t_a.size)
+        self.pulse_FT = np.fft.rfft(self.pulse, self.t_a_pulse.size)
 
         # use image arrival to determine end of time axis
         r_img = np.sqrt(self.dr ** 2 + (self.z_src + self.z_rcr) ** 2)
@@ -69,17 +67,19 @@ class XMission:
         spec.loader.exec_module(module)
 
         t_a_pulse, pulse = module.pulse(fc)
+        numf = t_a_pulse.size // 2 + 1
         dt = (t_a_pulse[-1] - t_a_pulse[0]) / (t_a_pulse.size - 1)
         fs = 1 / dt
+        f_a_pulse = np.arange(numf) * fs / t_a_pulse.size
 
-        return c, fc, fs, max_dur, max_surf_dur, t_a_pulse, pulse
+        return c, fc, fs, max_dur, max_surf_dur, t_a_pulse, f_a_pulse, pulse
 
     def _tf_axes(self, toml_dict):
         """Define the time and frequency axes"""
         if 't_pad' in toml_dict['t_f']:
             num_front_pad = int(np.ceil(toml_dict['t_f']['t_pad'] * self.fs))
         else:
-            num_front_pad = int(np.ceil(0.1e-3 * self.fs))
+            num_front_pad = 1
 
         num_back_pad = self.t_a_pulse.size
 
@@ -96,16 +96,4 @@ class XMission:
         numf = numt // 2 + 1
         faxis = np.arange(numf) * self.fs / numt
 
-        # specifications of surface time series
-        numt = int(np.ceil(self.fs * self.max_surf_dur)) \
-             + num_front_pad + num_back_pad
-        if numt % 2: numt += 1
-
-        # compute time and frequency axes
-        surf_taxis = np.arange(numt) * dt
-        surf_taxis -= dt * num_front_pad
-
-        numf = numt // 2 + 1
-        surf_faxis = np.arange(numf) * self.fs / numt
-
-        return taxis, faxis, surf_taxis, surf_faxis
+        return taxis, faxis
