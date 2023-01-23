@@ -12,7 +12,7 @@ solutions = ['all']
 
 [surface]
 type = "pm_spec"
-U20 = 5
+U20 = 8
 decimation = 10
 theta = [0, 45.0]
 time_step = 0.1
