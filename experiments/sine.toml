@@ -3,6 +3,7 @@ c = 1500.0
 fc = 2500.0
 max_dur = 0.02
 pulse = "nuttall"
+t_pad = 0.001
 
 [geometry]
 zrcr = -10.0
@@ -11,9 +12,10 @@ dr = 200.0
 solutions = ['all']
 
 [surface]
-type = "pm_spec"
-U20 = 4
+type = "sine"
+H = 2.0
+L = 40.0
 decimation = 10
 theta = [0, 45.0]
 time_step = 0.1
-num_snaps = 70
+num_steps = 50

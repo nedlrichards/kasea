@@ -1,14 +1,8 @@
 import numpy as np
 import numexpr as ne
 from math import pi
-from scipy.interpolate import RectBivariateSpline
 
-from kasea.surfaces import PM, ldis_deepwater
-from kasea.surfaces import e_delta, directional_spectrum
-from kasea import bound_axes
-
-from kasea import ldis_deepwater
-
+from kasea.surfaces import ldis_deepwater
 from kasea.surfaces.base import Surface
 
 class Sine(Surface):

@@ -3,7 +3,6 @@ c = 1500.0
 fc = 2500.0
 max_dur = 0.02
 pulse = "nuttall"
-t_pad = 0.00105
 
 [geometry]
 zrcr = -10.0
@@ -12,8 +11,11 @@ dr = 200.0
 solutions = ['all']
 
 [surface]
-type = "flat"
+type = "gaussian_spec"
+corr_length = 4.0
+rms_height = 1.0
+U20 = 4.0
 decimation = 10
 theta = [0, 45.0]
 time_step = 0.1
-num_snaps = 1
+num_snaps = 70

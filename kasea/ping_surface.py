@@ -4,9 +4,9 @@ from math import pi
 from os.path import join
 import copy
 from scipy.linalg import eigvals
+from time import gmtime, strftime
 
 from kasea import XMission, load_surface, Realization, spec_igral_FT
-
 from kasea.geometry import anisotopic_igral, isotopic_igral, \
                            stationary_points, integral_mask
 
@@ -97,14 +97,10 @@ class Ping:
         s = int(sample_shift // 1)
         if s < 0: 1/0  # Shouldn't have negative ined shifts
         p_img[s: s + self.xmission.t_a_pulse.size] = img_ts
-        save_dict['p_img'] = p_img
-
-        #save_dict['p_img'] = np.interp(self.xmission.t_a,
-                                       #self.xmission.t_a_pulse,
-                                       #self.xmission.pulse, left=0., right=0.)
+        save_dict['p_img'] = p_img / (4 * pi * save_dict['r_img'])
 
         np.savez(save_path, **save_dict)
-        print('saved ' + save_path)
+        print('saved ' + save_path + ' at ' + strftime("%H:%M:%S", gmtime()))
         return save_path
 
 
@@ -116,7 +112,7 @@ class Ping:
         return pos_rcr
 
 
-    def _ray_geometry(self, eta, pos_rcr, surface_mask=None,
+    def ray_geometry(self, eta, pos_rcr, surface_mask=None,
                       compute_derivatives=False):
         """Compute geometry quanities of KA kernel"""
         (x_rcr, y_rcr, z_rcr) = pos_rcr
@@ -152,7 +148,8 @@ class Ping:
         proj = ne.evaluate("(-dx_s * dz_dx - dy_s * dz_dy + dz_s) / m_s")
 
         # time delay
-        tau_ras = (m_s + m_r) / self.xmission.c
+        c = self.xmission.c
+        tau_ras = (m_s + m_r) / c
 
         specs = {'proj':proj, 'm_as':m_s, 'm_ra':m_r,
                  'tau_ras':tau_ras, 'rcr':pos_rcr}
@@ -165,17 +162,17 @@ class Ping:
         dz_dxdy = eta[6]
         dz_dydy = eta[7]
 
-        dr_dx_s = (dx_s + dz_s * dz_dx) / m_s
-        dr_dy_s = (dy_s + dz_s * dz_dy) / m_s
-        dr_dx_r = (dx_r + dz_s * dz_dx) / m_r
-        dr_dy_r = (dy_r + dz_s * dz_dy) / m_r
+        dr_dx_s = ne.evaluate("(dx_s + dz_s * dz_dx) / m_s")
+        dr_dy_s = ne.evaluate("(dy_s + dz_s * dz_dy) / m_s")
+        dr_dx_r = ne.evaluate("(dx_r + dz_s * dz_dx) / m_r")
+        dr_dy_r = ne.evaluate("(dy_r + dz_s * dz_dy) / m_r")
 
-        dr_dxdx_s = ((1 + dz_dxdx * dz_s + dz_dx ** 2) - dr_dx_s ** 2) / m_s
-        dr_dxdx_r = ((1 + dz_dxdx * dz_r + dz_dx ** 2) - dr_dx_r ** 2) / m_r
-        dr_dxdy_s = (dz_dxdy * dz_s + dr_dx_s * dr_dy_s) / m_s
-        dr_dxdy_r = (dz_dxdy * dz_r + dr_dx_r * dr_dy_r) / m_r
-        dr_dydy_s = ((1 + dz_dydy * dz_s + dz_dy ** 2) - dr_dy_s ** 2) / m_s
-        dr_dydy_r = ((1 + dz_dydy * dz_r + dz_dy ** 2) - dr_dy_r ** 2) / m_r
+        dr_dxdx_s = ne.evaluate("((1 + dz_dxdx * dz_s + dz_dx ** 2) - dr_dx_s ** 2) / m_s")
+        dr_dxdx_r = ne.evaluate("((1 + dz_dxdx * dz_r + dz_dx ** 2) - dr_dx_r ** 2) / m_r")
+        dr_dxdy_s = ne.evaluate("(dz_dxdy * dz_s + dr_dx_s * dr_dy_s) / m_s")
+        dr_dxdy_r = ne.evaluate("(dz_dxdy * dz_r + dr_dx_r * dr_dy_r) / m_r")
+        dr_dydy_s = ne.evaluate("((1 + dz_dydy * dz_s + dz_dy ** 2) - dr_dy_s ** 2) / m_s")
+        dr_dydy_r = ne.evaluate("((1 + dz_dydy * dz_r + dz_dy ** 2) - dr_dy_r ** 2) / m_r")
 
         hessian_1 = np.concatenate(((dr_dxdx_s + dr_dxdx_r)[:, None, None],
                                     (dr_dxdy_s + dr_dxdy_r)[:, None, None]),
@@ -197,7 +194,14 @@ class Ping:
             eta = isotopic_igral(self.surface, th, eta_interp,
                                  e_dx_interp, e_dy_interp,
                                  e_dxdx_interp, e_dxdy_interp, e_dydy_interp)
-            spec = self._ray_geometry(eta, pos_rcr, compute_derivatives=True)
+            spec = self.ray_geometry(eta, pos_rcr, compute_derivatives=True)
+
+            # rotate hessian
+            rotation = np.array(([np.cos(th), -np.sin(th)],
+                                 [np.sin(th), np.cos(th)]))
+            hess = spec['hessian']
+            spec['hessian'] = rotation.T @ hess @ rotation
+
             spec['i_scale'] = self.surface.dx
             spec['amp_scale'] = 1 / np.sqrt(np.abs(spec['hessian'][:, 1, 1]))
             spec["pulse_premult"] = "exp(-3j * pi / 4) * sqrt(f_a / c)"
@@ -212,7 +216,7 @@ class Ping:
             eta = anisotopic_igral(self.surface, pos_rcr, eta_interp,
                                    e_dx_interp, e_dy_interp,
                                    e_dxdx_interp, e_dydy_interp)
-            spec = self._ray_geometry(eta, pos_rcr, compute_derivatives=True)
+            spec = self.ray_geometry(eta, pos_rcr, compute_derivatives=True)
             spec['i_scale'] = self.surface.dx
             spec['amp_scale'] = 1 / np.sqrt(np.abs(spec['hessian'][:, 1, 1]))
             spec["pulse_premult"] = "exp(-3j * pi / 4) * sqrt(f_a / c)"
@@ -227,7 +231,7 @@ class Ping:
             points = stationary_points(self.surface, pos_rcr, eta, eta_interp,
                                        e_dx_interp, e_dy_interp, e_dxdx_interp,
                                        e_dxdy_interp, e_dydy_interp)
-            spec = self._ray_geometry(points, pos_rcr, compute_derivatives=True)
+            spec = self.ray_geometry(points, pos_rcr, compute_derivatives=True)
 
             # stationary phase in 2D
             amp_scale = []
@@ -254,7 +258,7 @@ class Ping:
         for th in self.xmission.theta:
             pos_rcr = self._pos_rcr(th)
             igral_mask = integral_mask(self.realization, th, self.xmission)
-            spec = self._ray_geometry(eta_list, pos_rcr,
+            spec = self.ray_geometry(eta_list, pos_rcr,
                                       surface_mask=igral_mask)
             spec['i_scale'] = self.surface.dx ** 2
             spec["pulse_premult"] = "-1j * (f_a / c)"

@@ -1,4 +1,4 @@
-import tomlkit
+import tomllib
 import numpy as np
 import numexpr as ne
 from math import pi
@@ -11,7 +11,7 @@ class XMission:
         """scatter calculation specification load and basic setup"""
         self.toml_file = toml_file
         with open(toml_file, "rb") as f:
-            toml_dict = tomlkit.load(f)
+            toml_dict = tomllib.load(f)
 
         self.z_src = toml_dict['geometry']['zsrc']
         self.z_rcr = toml_dict['geometry']['zrcr']
@@ -39,6 +39,7 @@ class XMission:
             self.theta = 0.
 
         self.time_step = toml_dict['surface']['time_step'] if 'time_step' in toml_dict['surface'] else None
+        self.num_steps = toml_dict['surface']['num_steps'] if 'num_steps' in toml_dict['surface'] else 1
         self.seed = toml_dict['surface']['seed'] if 'seed' in toml_dict else 0
         self.solutions = toml_dict['geometry']['solutions'] if 'solutions' in toml_dict['geometry'] else ['all']
         # axes and surface specification

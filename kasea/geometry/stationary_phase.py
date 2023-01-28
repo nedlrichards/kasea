@@ -126,17 +126,23 @@ def stationary_points(surface, pos_rcr, eta, eta_interp, e_dx_interp, e_dy_inter
         line = LineString(cnt)
         for dx_line in dx_lines:
             points = line.intersection(dx_line)
-            stationary_points.append(np.array([points.x, points.y], ndmin=2))
+            # points can be a point ot a multi point
+            try:
+                stationary_points.append(np.array([points.x, points.y], ndmin=2))
+            except AttributeError:
+                for pnt in points.geoms:
+                    stationary_points.append(np.array([pnt.x, pnt.y], ndmin=2))
+
 
     stationary_points = np.concatenate(stationary_points) * surface.dx \
                       + np.array([surface.x_a[0], surface.y_a[0]], ndmin=2)
 
-    eta_stationary = np.concatenate([stationary_points.T,
-        eta_interp(stationary_points)[:, None],
-        e_dx_interp(stationary_points)[:, None],
-        e_dy_interp(stationary_points)[:, None],
-        e_dxdx_interp(stationary_points)[:, None],
-        e_dxdy_interp(stationary_points)[:, None],
-        e_dydy_interp(stationary_points)[:, None]], axis=0)
+    results = np.array([stationary_points[:, 0], stationary_points[:, 1],
+                       eta_interp(stationary_points),
+                       e_dx_interp(stationary_points),
+                       e_dy_interp(stationary_points),
+                       e_dxdx_interp(stationary_points),
+                       e_dxdy_interp(stationary_points),
+                       e_dydy_interp(stationary_points)])
 
-    return eta_stationary
+    return results
