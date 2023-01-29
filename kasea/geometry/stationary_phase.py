@@ -133,7 +133,6 @@ def stationary_points(surface, pos_rcr, eta, eta_interp, e_dx_interp, e_dy_inter
                 for pnt in points.geoms:
                     stationary_points.append(np.array([pnt.x, pnt.y], ndmin=2))
 
-
     stationary_points = np.concatenate(stationary_points) * surface.dx \
                       + np.array([surface.x_a[0], surface.y_a[0]], ndmin=2)
 
