@@ -1,0 +1,19 @@
+[t_f]
+c = 1500.0
+fc = 5000.0
+max_dur = 0.02
+pulse = "nuttall"
+
+[geometry]
+zrcr = -5.0
+zsrc = -5.0
+dr = 20.0
+solutions = ['all']
+
+[surface]
+type = "PM"
+U20 = 5
+decimation = 10
+theta = [0]
+time_step = 0.1
+num_snaps = 70

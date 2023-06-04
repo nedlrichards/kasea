@@ -30,8 +30,7 @@ class Realization:
 
         # setup file to store surfaces
         self.ndshape = (6, surface.x_a.size, surface.y_a.size)
-
-        self.eta_file = path.join(self.tmpdir, 'realization.dat')
+        self.eta_file = path.join(self.tmpdir, 'eta.dat')
 
 
     def __call__(self):

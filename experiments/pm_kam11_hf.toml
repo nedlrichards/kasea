@@ -6,15 +6,15 @@ pulse = "nuttall"
 t_pad = 0.001
 
 [geometry]
-zrcr = -10.0
-zsrc = -20.0
-dr = 200.0
+zrcr = -25.0
+zsrc = -103.0
+dr = 460.0
 solutions = ['iso', 'aniso', '2D']
 
 [surface]
 type = "pm_spec"
 U20 = 10.0
-decimation = 10
-theta = [0, 45.0]
+decimation = 8
+theta = [0]
 time_step = 0.1
 num_steps = 70

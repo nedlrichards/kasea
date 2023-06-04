@@ -1,34 +1,48 @@
+import argparse
 from math import pi
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import hilbert
-import glob
-plt.ion()
+from os import listdir
+from os.path import join
 
-file_name = 'results/sine_0_'
-#file_name = 'results/flat_0_000.npz'
+parser = argparse.ArgumentParser(
+                    prog = 'kasea',
+                    description = 'executes experiment specified in toml file')
+parser.add_argument('filename')
 
-files = glob.glob(file_name + '*.npz')
+args = parser.parse_args()
+
+post_pos = args.filename.split('/')
+post_pos = post_pos[-1] if len(post_pos[-1]) else post_pos[-2]
+post_pos = post_pos.split('.')[0]
+
+data_dir = join('results', post_pos)
+
+files = listdir(data_dir)
 files.sort()
+files = [join(data_dir, f) for f in files]
 
-theta_i = 0
-#pressure_type = 'p_sca_2D'
-pressure_type = 'p_sca_eig'
+file_name = files[0]
 
-p_plot = []
-time = []
-for f in files:
-    file = np.load(f)
-    p_plot.append(file[pressure_type][theta_i])
-    time.append(file['time'])
-p_plot = np.array(p_plot)
-time = np.array(time)
+class objectview(object):
+    def __init__(self, d):
+        self.__dict__ = d
 
-p_dB = 20 * np.log10(np.abs(hilbert(p_plot, axis=-1)))
-p_ref = 20 * np.log10(4 * pi * file['r_img'])
-p_dB += p_ref
+ping = objectview(dict(np.load(file_name)))
+
+plot_i = 1
+
+def normalize(p_in, r_img):
+    p_dB = 20 * np.log10(np.abs(hilbert(p_in + np.spacing(1), axis=-1)))
+    p_ref = 20 * np.log10(4 * pi * r_img)
+    return p_dB + p_ref
 
 fig, ax = plt.subplots()
-cm = plt.pcolormesh(time, 1e3 * file['t_a'], p_dB.T, vmin=-50, vmax=5)
-fig.colorbar(cm)
+ax.plot(1e3 * ping.t_a, normalize(ping.p_sca_2D, ping.r_img)[plot_i], color='k')
+ax.plot(1e3 * ping.t_a, normalize(ping.p_sca_iso, ping.r_img)[plot_i])
+ax.plot(1e3 * ping.t_a, normalize(ping.p_sca_ani, ping.r_img)[plot_i])
+#ax.plot(1e3 * ping.t_a, normalize(ping.p_sca_eig, ping.r_img)[plot_i])
+ax.set_ylim(-60, 5)
 
+plt.show()

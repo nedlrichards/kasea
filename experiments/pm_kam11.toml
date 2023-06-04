@@ -3,19 +3,17 @@ c = 1500.0
 fc = 2500.0
 max_dur = 0.02
 pulse = "nuttall"
-t_pad = 0.002
+t_pad = 0.001
 
 [geometry]
-zrcr = -10.0
-zsrc = -20.0
-dr = 200.0
-solutions = ['all']
+zrcr = -25.0
+zsrc = -103.0
+dr = 460.0
+solutions = ['iso', 'aniso', '2D']
 
 [surface]
-type = "gaussian_spec"
-corr_length = 5.0
-rms_height = 0.58389
-U20 = 4.0
+type = "pm_spec"
+U20 = 10.0
 decimation = 10
 theta = [0, 45.0]
 time_step = 0.1

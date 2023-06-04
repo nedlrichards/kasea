@@ -2,11 +2,12 @@ import numpy as np
 import numexpr as ne
 from math import pi
 from os.path import join
+from os import makedirs
 import copy
 from scipy.linalg import eigvals
 from time import gmtime, strftime
 
-from kasea import XMission, load_surface, Realization, spec_igral_FT
+from kasea import XMission, load_surface, Realization, spec_igral_FT, spec_igral
 from kasea.geometry import anisotopic_igral, isotopic_igral, \
                            stationary_points, integral_mask
 
@@ -14,13 +15,16 @@ from scipy.interpolate import RegularGridInterpolator
 
 class Ping:
     """Run common setup and compute scatter time-series"""
-    def __init__(self, toml_file, save_dir='results'):
+    def __init__(self, toml_file, save_dir='results', ier='FT'):
         """Load xmission parameters and run basic setup"""
-        self.save_dir = save_dir
+        run_name = toml_file.split('/')[-1].split('.')[0]
+        self.save_dir = join(save_dir, run_name)
+        makedirs(self.save_dir, exist_ok=True)
 
         self.xmission = XMission(toml_file)
         self.surface = load_surface(self.xmission)
         self.realization = Realization(self.surface)
+        self.igral = spec_igral_FT if ier == 'FT' else spec_igral
 
         self.save_name = self.surface.surface_type \
                        + f"_{self.surface.seed}"
@@ -58,26 +62,28 @@ class Ping:
 
         if any(x in self.xmission.solutions for x in ['eigen', 'all']):
             specs = [spec for spec in self.eigen_KA_byangle(eta, *iers)]
-            p = [spec_igral_FT(self.xmission, spec) for spec in specs]
+            p = [self.igral(self.xmission, spec) for spec in specs]
+            for i, spec in enumerate(specs):
+                save_dict[f'sta_points_{i:03}'] = spec['sta_points']
             save_dict['p_sca_eig'] = np.array(p)
 
 
         # 1D isotropic surface results by angle
         if any(x in self.xmission.solutions for x in ['iso', 'all']):
             specs = [spec for spec in self.iso_KA_byangle(*iers)]
-            p = [spec_igral_FT(self.xmission, spec) for spec in specs]
+            p = [self.igral(self.xmission, spec) for spec in specs]
             save_dict['p_sca_iso'] = np.array(p)
 
         # 1D anisotropic surface results by angle
         if any(x in self.xmission.solutions for x in ['aniso', 'all']):
             specs = [spec for spec in self.aniso_KA_byangle(*iers)]
-            p = [spec_igral_FT(self.xmission, spec) for spec in specs]
+            p = [self.igral(self.xmission, spec) for spec in specs]
             save_dict['p_sca_ani'] = np.array(p)
 
         # 2D surface results by angle
         if any(x in self.xmission.solutions for x in ['2D', 'all']):
             specs = [spec for spec in self.full_KA_byangle(eta)]
-            p = [spec_igral_FT(self.xmission, spec) for spec in specs]
+            p = [self.igral(self.xmission, spec) for spec in specs]
             save_dict['p_sca_2D'] = np.array(p)
 
         # save pressure time series and downsampled surface
@@ -87,6 +93,10 @@ class Ping:
         save_dict['x_a'] = self.surface.x_a[::decimation[0]]
         save_dict['y_a'] = self.surface.y_a[::decimation[1]]
         save_dict['r_img'] = self.xmission.tau_img * self.xmission.c
+        save_dict['theta'] = self.xmission.theta
+
+        for i, th in enumerate(self.xmission.theta):
+            save_dict[f'pos_rcr_{i:03}'] = self._pos_rcr(th)
 
         # image solution
         p_img = np.zeros(self.xmission.t_a.size)
@@ -194,13 +204,30 @@ class Ping:
             eta = isotopic_igral(self.surface, th, eta_interp,
                                  e_dx_interp, e_dy_interp,
                                  e_dxdx_interp, e_dxdy_interp, e_dydy_interp)
-            spec = self.ray_geometry(eta, pos_rcr, compute_derivatives=True)
 
-            # rotate hessian
+            # Rotate surface derivatives
             rotation = np.array(([np.cos(th), -np.sin(th)],
                                  [np.sin(th), np.cos(th)]))
-            hess = spec['hessian']
-            spec['hessian'] = rotation.T @ hess @ rotation
+            e_1 = np.concatenate((eta[3][:, None, None],
+                                  eta[4][:, None, None]),
+                                  axis=1)
+            eta_ders = rotation @ e_1
+            eta[3] = eta_ders[:, 0, 0]
+            eta[4] = 0.
+
+            e_1 = np.concatenate((eta[5][:, None, None],
+                                  eta[6][:, None, None]),
+                                  axis=1)
+            e_2 = np.concatenate((eta[6][:, None, None],
+                                  eta[7][:, None, None]),
+                                  axis=1)
+            eta_ders = np.concatenate([e_1, e_2], axis=2)
+            eta_ders = rotation.T @ eta_ders @ rotation
+            eta[5] = eta_ders[:, 0, 0]
+            eta[6] = 0.
+            eta[7] = 0.
+
+            spec = self.ray_geometry(eta, pos_rcr, compute_derivatives=True)
 
             spec['i_scale'] = self.surface.dx
             spec['amp_scale'] = 1 / np.sqrt(np.abs(spec['hessian'][:, 1, 1]))
@@ -217,6 +244,7 @@ class Ping:
                                    e_dx_interp, e_dy_interp,
                                    e_dxdx_interp, e_dydy_interp)
             spec = self.ray_geometry(eta, pos_rcr, compute_derivatives=True)
+
             spec['i_scale'] = self.surface.dx
             spec['amp_scale'] = 1 / np.sqrt(np.abs(spec['hessian'][:, 1, 1]))
             spec["pulse_premult"] = "exp(-3j * pi / 4) * sqrt(f_a / c)"
@@ -235,17 +263,20 @@ class Ping:
 
             # stationary phase in 2D
             amp_scale = []
+            premult = []
             for hess in spec['hessian']:
                 vals = eigvals(hess)
                 det = np.prod(vals)
                 sig = np.sum(np.sign(vals))
-                scale = np.exp(-1j * pi * sig / 4) / np.sqrt(np.abs(det))
+                scale = 1 / np.sqrt(np.abs(det))
                 amp_scale.append(scale)
+                premult.append(f'-1j * exp(-1j * pi * {sig} / 4)')
             amp_scale = np.array(amp_scale)
 
+            spec['sta_points'] = points[:2, :]
             spec['i_scale'] = 1.0
             spec['amp_scale'] = amp_scale
-            spec["pulse_premult"] = "-1j"
+            spec["pulse_premult"] = premult
             yield spec
 
 

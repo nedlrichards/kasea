@@ -1,7 +1,7 @@
 import numpy as np
 import numexpr as ne
 from skimage import measure
-from shapely.geometry import LineString
+from shapely.geometry import LineString, MultiPoint, Point
 
 
 def anisotopic_igral(surface, pos_rcr, eta_interp, e_dx_interp, e_dy_interp,
@@ -127,11 +127,16 @@ def stationary_points(surface, pos_rcr, eta, eta_interp, e_dx_interp, e_dy_inter
         for dx_line in dx_lines:
             points = line.intersection(dx_line)
             # points can be a point ot a multi point
-            try:
-                stationary_points.append(np.array([points.x, points.y], ndmin=2))
-            except AttributeError:
+            if isinstance(points, LineString):
+                #print(f'linestring of length {points.length:.2f}')
+                continue
+            elif isinstance(points, MultiPoint):
                 for pnt in points.geoms:
                     stationary_points.append(np.array([pnt.x, pnt.y], ndmin=2))
+            elif isinstance(points, Point):
+                stationary_points.append(np.array([points.x, points.y], ndmin=2))
+            else:
+                raise(ValueError(points))
 
     stationary_points = np.concatenate(stationary_points) * surface.dx \
                       + np.array([surface.x_a[0], surface.y_a[0]], ndmin=2)

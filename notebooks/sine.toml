@@ -1,0 +1,22 @@
+[t_f]
+c = 1500.0
+fc = 2500.0
+max_dur = 0.01
+pulse = "nuttall"
+
+[geometry]
+zrcr = -10.0
+zsrc = -20.0
+dr = 20.0
+solutions = []
+
+[surface]
+type = "sine"
+H = 10.0
+L = 10.0
+decimation = 10
+theta = [0, 45.0]
+#theta = [0.0, 45.0, 60.0, 90.0]
+#theta = [0.0, 30.0, 45.0, 60.0, 90.0]
+time_step = 0.1
+num_snaps = 70
